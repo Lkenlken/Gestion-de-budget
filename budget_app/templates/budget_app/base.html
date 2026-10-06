@@ -1,0 +1,233 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Kendevis - Application web pour la gestion mensuelle assistée et automatique">
+    <meta name="color-scheme" content="light dark">
+    <title>{% block title %}Kendevis - Gestion de Budget{% endblock %}</title>
+
+    <!-- Police Inter (chargée avant le rendu pour éviter les sauts de mise en page) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap 5.3 CSS via CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{% static 'budget_app/css/style.css' %}">
+
+    <script>
+        /* Applique le thème et la taille de police AVANT le premier rendu
+           pour éviter le flash blanc (FOUC) en thème sombre. */
+        (function () {
+            try {
+                var stored = localStorage.getItem('kd-theme');
+                var theme = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+
+                var scale = parseFloat(localStorage.getItem('kd-font-scale'));
+                if (scale >= 0.85 && scale <= 1.4) {
+                    document.documentElement.style.setProperty('--font-scale', scale);
+                }
+            } catch (e) { /* localStorage indisponible : on garde le thème clair */ }
+        })();
+    </script>
+
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Barre de navigation -->
+    <nav class="navbar navbar-expand-lg sticky-top">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'budget_app:dashboard' %}">
+                <span class="brand-mark"><i class="bi bi-wallet2"></i></span>
+                <span class="d-flex flex-column lh-1">
+                    <span class="brand-text">Kendevis</span>
+                    <span class="brand-sub">Gestion de budget</span>
+                </span>
+            </a>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                    aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-1">
+                    {% if user.is_authenticated %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'budget_app:dashboard' %}">
+                                <i class="bi bi-speedometer2 me-1"></i>Tableau de bord
+                            </a>
+                        </li>
+                        {% if user.is_staff %}
+                            <li class="nav-item">
+                                <a class="nav-link" href="{% url 'admin:index' %}" target="_blank" rel="noopener">
+                                    <i class="bi bi-shield-lock me-1"></i>Administration
+                                </a>
+                            </li>
+                        {% endif %}
+                    {% endif %}
+
+                    <li class="vr d-none d-lg-block mx-1 text-muted"></li>
+
+                    <!-- Taille de police : A- / A / A+ -->
+                    <li class="nav-item">
+                        <div class="font-group" role="group" aria-label="Taille de police">
+                            <button type="button" class="icon-btn" data-font-scale="0.9" title="Réduire la police" aria-label="Réduire la police">A-</button>
+                            <button type="button" class="icon-btn is-active" data-font-scale="1" title="Taille par défaut" aria-label="Taille par défaut">A</button>
+                            <button type="button" class="icon-btn" data-font-scale="1.15" title="Agrandir la police" aria-label="Agrandir la police">A+</button>
+                        </div>
+                    </li>
+
+                    <!-- Thème clair / sombre -->
+                    <li class="nav-item ms-lg-1">
+                        <button type="button" class="icon-btn" id="theme-toggle"
+                                title="Basculer entre thème clair et sombre"
+                                aria-label="Changer de thème">
+                            <i class="bi bi-moon-stars" id="theme-icon"></i>
+                        </button>
+                    </li>
+
+                    {% if user.is_authenticated %}
+                        <!-- Menu du compte -->
+                        <li class="nav-item dropdown ms-lg-1">
+                            <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#"
+                               data-bs-toggle="dropdown" aria-expanded="false">
+                                <span class="brand-mark" style="width:28px;height:28px;font-size:0.85rem;">
+                                    <i class="bi bi-person"></i>
+                                </span>
+                                <span class="text-truncate" style="max-width:120px;">{{ user.username }}</span>
+                                {% if user.is_staff %}
+                                    <span class="badge bg-warning text-dark">Admin</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Utilisateur</span>
+                                {% endif %}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><h6 class="dropdown-header">Mon compte</h6></li>
+                                <li>
+                                    <span class="dropdown-item-text small text-muted">
+                                        <i class="bi bi-person-badge me-1"></i>
+                                        {{ user.get_full_name|default:user.username }}
+                                    </span>
+                                </li>
+                                <li>
+                                    <span class="dropdown-item-text small text-muted">
+                                        <i class="bi bi-calendar-check me-1"></i>
+                                        Membre depuis {{ user.date_joined|date:"d/m/Y" }}
+                                    </span>
+                                </li>
+                                {% if user.is_staff %}
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <a class="dropdown-item" href="{% url 'admin:index' %}" target="_blank" rel="noopener">
+                                            <i class="bi bi-gear me-1"></i>Paramètres (administration)
+                                        </a>
+                                    </li>
+                                {% endif %}
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <form method="post" action="{% url 'budget_app:logout' %}" class="logout-form">
+                                        {% csrf_token %}
+                                        <button type="submit" class="dropdown-item text-danger">
+                                            <i class="bi bi-box-arrow-right me-1"></i>Déconnexion
+                                        </button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </li>
+                    {% else %}
+                        <li class="nav-item ms-lg-1">
+                            <a class="btn btn-primary btn-sm px-3" href="{% url 'budget_app:login' %}">
+                                <i class="bi bi-box-arrow-in-right me-1"></i>Connexion
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Contenu principal -->
+    <main class="container py-4">
+        {% if messages %}
+            <div class="messages-container" id="messages-container">
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
+                        <i class="bi {% if message.tags == 'success' %}bi-check-circle-fill{% elif message.tags == 'error' or message.tags == 'danger' %}bi-exclamation-triangle-fill{% else %}bi-info-circle-fill{% endif %} me-2"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Pied de page -->
+    <footer class="footer py-4">
+        <div class="container">
+            <div class="row g-3 align-items-center">
+                <div class="col-12 col-lg-5 text-center text-lg-start">
+                    <div class="d-inline-flex align-items-center gap-2">
+                        <span class="brand-mark" style="width:30px;height:30px;font-size:0.9rem;">
+                            <i class="bi bi-wallet2"></i>
+                        </span>
+                        <span class="fw-bold">Kendevis</span>
+                    </div>
+                    <div class="small mt-1">
+                        Application web pour la gestion mensuelle assistée et automatique
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-4 text-center small">
+                    <a href="tel:+261384160133" class="d-inline-flex align-items-center gap-1 me-3"
+                       title="Appeler l'administrateur">
+                        <i class="bi bi-telephone-fill"></i>038 41 601 33
+                    </a>
+                    <a href="https://wa.me/261384160133" target="_blank" rel="noopener"
+                       class="d-inline-flex align-items-center gap-1 me-3" title="Écrire sur WhatsApp">
+                        <i class="bi bi-whatsapp"></i>WhatsApp
+                    </a>
+                    <a href="mailto:yandonilanitraken@gmail.com" class="d-inline-flex align-items-center gap-1 me-3">
+                        <i class="bi bi-envelope-fill"></i>Contacter l'administrateur
+                    </a>
+                    <a href="https://www.facebook.com/search/top?q=Lken%20Yandoniltrz" target="_blank" rel="noopener"
+                       class="d-inline-flex align-items-center gap-1">
+                        <i class="bi bi-facebook"></i>Lken Yandoniltrz
+                    </a>
+                </div>
+
+                <div class="col-12 col-lg-3 text-center text-lg-end small">
+                    &copy; {% now "Y" %} Kendevis &mdash; Tous droits réservés
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Retour en haut de page -->
+    <button type="button" class="back-to-top" id="back-to-top" aria-label="Retour en haut">
+        <i class="bi bi-arrow-up"></i>
+    </button>
+
+    <!-- Bootstrap 5.3 JS via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
+            crossorigin="anonymous"></script>
+
+    <!-- JS de l'application -->
+    <script src="{% static 'budget_app/js/budget_realtime.js' %}"></script>
+    <script src="{% static 'budget_app/js/ui.js' %}"></script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,317 @@
+{% extends 'budget_app/base.html' %}
+{% load static math_extras l10n %}
+
+{% block title %}Tableau de Bord - Kendevis{% endblock %}
+
+{% block content %}
+<!-- Barre d'en-tête : mois courant + navigation dans l'historique -->
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 fade-up">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span class="month-chip">
+            <i class="bi bi-calendar-month"></i>
+            {% if budget %}{{ budget.mois }}{% else %}Aucun budget{% endif %}
+        </span>
+        {% if budgets_total > 1 %}
+            <span class="pill"><i class="bi bi-archive"></i>{{ budgets_total }} mois enregistrés</span>
+        {% endif %}
+        {% if budget %}
+            <span class="pill {% if reste < 0 %}pill-danger{% else %}pill-success{% endif %}">
+                <i class="bi {% if reste < 0 %}bi-exclamation-triangle{% else %}bi-check2-circle{% endif %}"></i>
+                {% if reste < 0 %}Budget dépassé{% else %}Budget en règle{% endif %}
+            </span>
+        {% endif %}
+    </div>
+
+    {% if peut_naviguer %}
+        <div class="history-nav" title="Navigation dans l'historique (réservée aux administrateurs)">
+            <a class="btn btn-sm btn-outline-primary {% if not budget_precedent %}disabled{% endif %}"
+               href="{% if budget_precedent %}?b={{ budget_precedent.pk }}{% else %}?{% endif %}"
+               {% if not budget_precedent %}aria-disabled="true" tabindex="-1"{% endif %}>
+                <i class="bi bi-arrow-left"></i>Mois précédent
+            </a>
+            <a class="btn btn-sm btn-outline-primary {% if not budget_suivant %}disabled{% endif %}"
+               href="{% if budget_suivant %}?b={{ budget_suivant.pk }}{% else %}?{% endif %}"
+               {% if not budget_suivant %}aria-disabled="true" tabindex="-1"{% endif %}>
+                Mois suivant<i class="bi bi-arrow-right"></i>
+            </a>
+        </div>
+    {% endif %}
+</div>
+<!-- Budget Summary Cards -->
+<div class="row g-4 mb-4">
+    {% if budget %}
+        <!-- Budget Initial -->
+        <div class="col-12 col-md-6 col-lg-4">
+            <div class="card budget-card h-100 shadow-sm border-0">
+                <div class="card-body text-center">
+                    <div class="budget-icon bg-primary bg-opacity-10 text-primary mx-auto mb-3">
+                        <i class="bi bi-cash-stack fs-2"></i>
+                    </div>
+                    <h6 class="text-muted text-uppercase small fw-bold mb-1">Budget Initial</h6>
+                    <h3 class="fw-bold text-primary mb-0">
+                        <span class="stat-number" data-count-to="{{ budget.montant_initial|unlocalize }}"
+                              data-count-decimals="2">{{ budget.montant_initial|floatformat:2 }}</span>
+                        <small class="fs-6 fw-normal">Ar</small>
+                    </h3>
+                    <div class="mt-2 text-muted small">{{ budget.mois }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Dépensé -->
+        <div class="col-12 col-md-6 col-lg-4">
+            <div class="card budget-card h-100 shadow-sm border-0">
+                <div class="card-body text-center">
+                    <div class="budget-icon bg-danger bg-opacity-10 text-danger mx-auto mb-3">
+                        <i class="bi bi-currency-exchange fs-2"></i>
+                    </div>
+                    <h6 class="text-muted text-uppercase small fw-bold mb-1">Total Dépensé</h6>
+                    <h3 class="fw-bold text-danger mb-0">
+                        <span class="stat-number" data-count-to="{{ total_depenses|unlocalize }}"
+                              data-count-decimals="2">{{ total_depenses|floatformat:2 }}</span>
+                        <small class="fs-6 fw-normal">Ar</small>
+                    </h3>
+                    <div class="mt-2 text-muted small">
+                        {% if budget.montant_initial > 0 %}
+                            ({{ total_depenses|div:budget.montant_initial|mul:100|floatformat:1 }}%)
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Solde Restant -->
+        <div class="col-12 col-md-6 col-lg-4">
+            <div class="card budget-card h-100 shadow-sm border-0">
+                <div class="card-body text-center">
+                    <div class="budget-icon {% if reste < 0 %}bg-danger{% else %}bg-success{% endif %} bg-opacity-10 {% if reste < 0 %}text-danger{% else %}text-success{% endif %} mx-auto mb-3">
+                        <i class="bi {% if reste < 0 %}bi-exclamation-triangle{% else %}bi-check-circle{% endif %} fs-2"></i>
+                    </div>
+                    <h6 class="text-muted text-uppercase small fw-bold mb-1">Solde Restant</h6>
+                    <h3 class="fw-bold {% if reste < 0 %}text-danger{% else %}text-success{% endif %} mb-0">
+                        <span class="stat-number" data-count-to="{{ reste|unlocalize }}"
+                              data-count-decimals="2">{{ reste|floatformat:2 }}</span>
+                        <small class="fs-6 fw-normal">Ar</small>
+                    </h3>
+                    {% if reste < 0 %}
+                        <div class="mt-2 badge bg-danger">Dépassement de budget !</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <!-- Aucun budget défini -->
+        <div class="col-12">
+            <div class="card budget-card h-100 shadow-sm border-0 text-center py-5">
+                <div class="card-body">
+                    <i class="bi bi-exclamation-circle text-warning fs-1 mb-3"></i>
+                    <h4 class="text-muted">Aucun budget mensuel défini</h4>
+                    <p class="text-muted mb-4">Contactez l'administrateur pour créer un budget mensuel.</p>
+                    {% if user.is_staff %}
+                        <a href="{% url 'admin:budget_app_budgetmensuel_add' %}" class="btn btn-primary" target="_blank">
+                            <i class="bi bi-plus-circle me-1"></i>Créer un budget
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Formulaire d'ajout de dépense -->
+{% if budget %}
+<div class="row g-4 mb-4">
+    <div class="col-12 col-lg-6">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white border-0 py-3">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-plus-circle text-primary me-2"></i>Nouvelle Dépense</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" id="depense-form" novalidate>
+                    {% csrf_token %}
+
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.date.id_for_label }}" class="form-label fw-semibold">{{ form.date.label }}</label>
+                            {{ form.date }}
+                            {% if form.date.errors %}
+                                <div class="text-danger small mt-1">{{ form.date.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.designation.id_for_label }}" class="form-label fw-semibold">{{ form.designation.label }}</label>
+                            {{ form.designation }}
+                            {% if form.designation.errors %}
+                                <div class="text-danger small mt-1">{{ form.designation.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.prix_unitaire.id_for_label }}" class="form-label fw-semibold">{{ form.prix_unitaire.label }}</label>
+                            <div class="input-group">
+                                <span class="input-group-text">Ar</span>
+                                {{ form.prix_unitaire }}
+                            </div>
+                            {% if form.prix_unitaire.errors %}
+                                <div class="text-danger small mt-1">{{ form.prix_unitaire.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.quantite.id_for_label }}" class="form-label fw-semibold">{{ form.quantite.label }}</label>
+                            {{ form.quantite }}
+                            {% if form.quantite.errors %}
+                                <div class="text-danger small mt-1">{{ form.quantite.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-12">
+                            <div class="alert alert-info py-2 mb-0" id="montant-total-preview">
+                                <i class="bi bi-calculator me-2"></i>
+                                <strong>Montant total de la ligne : </strong>
+                                <span id="montant-total-value" class="fw-bold fs-5">0.00 Ar</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg px-4">
+                            <i class="bi bi-save me-1"></i>Enregistrer la dépense
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Récapitulatif rapide -->
+    <div class="col-12 col-lg-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-0 py-3">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-graph-up text-success me-2"></i>Récapitulatif</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center g-3">
+                    <div class="col-6">
+                        <div class="p-3 rounded" style="background: var(--surface-2); border: 1px solid var(--border);">
+                            <div class="fw-bold fs-4 text-primary">{{ depenses|length }}</div>
+                            <div class="text-muted small">Dépenses enregistrées</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-3 rounded" style="background: var(--surface-2); border: 1px solid var(--border);">
+                            <div class="fw-bold fs-4 text-danger amount">{{ total_depenses|floatformat:2 }} Ar</div>
+                            <div class="text-muted small">Total dépensé</div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-3">
+
+                <h6 class="fw-bold mb-3">Progression du budget</h6>
+                <div class="progress progress-stacked" style="height: 24px;" role="progressbar"
+                     aria-valuenow="{% if budget.montant_initial > 0 %}{{ total_depenses|div:budget.montant_initial|mul:100|floatformat:0 }}{% else %}0{% endif %}"
+                     aria-valuemin="0" aria-valuemax="100">
+                    <div class="progress-bar bg-success" style="width: {% if budget.montant_initial > 0 %}{{ total_depenses|div:budget.montant_initial|mul:100|floatformat:0 }}{% else %}0{% endif %}%;">
+                        Utilisé
+                    </div>
+                    {% if reste > 0 %}
+                        <div class="progress-bar bg-info" style="width: {{ reste|div:budget.montant_initial|mul:100|floatformat:0 }}%;">
+                            Restant
+                        </div>
+                    {% elif reste < 0 %}
+                        <div class="progress-bar bg-danger" style="width: {{ reste|abs|div:budget.montant_initial|mul:100|floatformat:0 }}%;">
+                            Dépassement
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div class="d-flex justify-content-between mt-2 small text-muted">
+                    <span>0%</span>
+                    <span>100%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tableau des dépenses -->
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white border-0 py-3 d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+        <h5 class="mb-0 fw-bold"><i class="bi bi-list-ul text-secondary me-2"></i>Historique des Dépenses</h5>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <div class="search-box">
+                <i class="bi bi-search"></i>
+                <input type="search" id="depense-search" class="form-control form-control-sm"
+                       placeholder="Rechercher une dépense..." aria-label="Rechercher une dépense">
+            </div>
+            <span class="badge bg-primary fs-6 px-3 py-2" id="depenses-count">{{ depenses|length }} dépenses</span>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        {% if depenses %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="depenses-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col" class="ps-3">Date</th>
+                            <th scope="col">Désignation</th>
+                            <th scope="col" class="text-end pe-2">Prix Unitaire</th>
+                            <th scope="col" class="text-center">Qté</th>
+                            <th scope="col" class="text-end pe-2">Total</th>
+                            <th scope="col" class="text-center">Par</th>
+                            {% if is_staff %}
+                                <th scope="col" class="text-center pe-3">Actions</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for depense in depenses %}
+                        <tr>
+                            <td class="ps-3">
+                                <span class="fw-medium">{{ depense.date|date:"d/m/Y" }}</span>
+                                <br><small class="text-muted">{{ depense.created_at|date:"H:i" }}</small>
+                            </td>
+                            <td>
+                                <span class="fw-medium">{{ depense.designation }}</span>
+                            </td>
+                            <td class="text-end pe-2 amount">{{ depense.prix_unitaire|floatformat:2 }} Ar</td>
+                            <td class="text-center amount">{{ depense.quantite }}</td>
+                            <td class="text-end pe-2 amount amount-lg">{{ depense.montant_total|floatformat:2 }} Ar</td>
+                            <td class="text-center">
+                                <span class="badge bg-light text-dark">{{ depense.utilisateur.username }}</span>
+                            </td>
+                            {% if is_staff %}
+                                <td class="text-center pe-3">
+                                    <form method="post" action="{% url 'budget_app:supprimer_depense' depense.id %}" class="d-inline"
+                                          onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer cette dépense ?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                        <tr id="search-empty" class="d-none">
+                            <td colspan="7" class="text-center text-muted py-4">
+                                <i class="bi bi-search fs-4 d-block mb-2"></i>
+                                Aucune dépense ne correspond à votre recherche.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-receipt text-muted fs-1 mb-3"></i>
+                <h5 class="text-muted">Aucune dépense enregistrée</h5>
+                <p class="text-muted mb-0">Commencez par ajouter votre première dépense ci-dessus.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
