@@ -109,7 +109,7 @@
                 <i class="bi bi-wallet2"></i>
             </div>
             <h3 class="fw-bold mb-1">Kendevis</h3>
-            <p class="mb-0 opacity-75">Connectez-vous pour gérer votre budget mensuel</p>
+            <p class="mb-0 opacity-75">Connectez-vous avec votre numéro de téléphone</p>
         </div>
 
         <!-- Formulaire -->
@@ -126,12 +126,12 @@
                 {% csrf_token %}
 
                 <div class="mb-3">
-                    <label for="{{ form.username.id_for_label }}" class="form-label">
-                        <i class="bi bi-person me-1"></i>Nom d'utilisateur
+                    <label for="{{ form.telephone.id_for_label }}" class="form-label">
+                        <i class="bi bi-telephone me-1"></i>Numéro de téléphone
                     </label>
-                    {{ form.username }}
-                    {% if form.username.errors %}
-                        <div class="text-danger small mt-1">{{ form.username.errors }}</div>
+                    {{ form.telephone }}
+                    {% if form.telephone.errors %}
+                        <div class="text-danger small mt-1">{{ form.telephone.errors }}</div>
                     {% endif %}
                 </div>
 

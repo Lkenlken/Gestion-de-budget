@@ -11,7 +11,8 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
 from .models import BudgetMensuel, Depense
-from .forms import DepenseForm
+from .forms import ConnexionForm, DepenseForm
+from .telephone import normaliser_telephone
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +31,16 @@ def _client_ip(request):
     return request.META.get('REMOTE_ADDR') or 'inconnu'
 
 
-def _cache_key(request, username=''):
-    """Clé de cache unique pour un couple (IP, nom d'utilisateur)."""
-    return f"login-attempt:{_client_ip(request)}:{username.lower()}"
+def _cache_key(request, identifiant=''):
+    """
+    Clé de cache unique pour un couple (IP, identifiant).
+
+    L'identifiant est le numéro de téléphone normalisé : `0384160133`,
+    `038 41 601 33` et `+261384160133` partagent donc le même compteur
+    d'échecs, ce qui empêche de contourner la limite en changeant
+    la façon dont le numéro est écrit.
+    """
+    return f"login-attempt:{_client_ip(request)}:{normaliser_telephone(identifiant)}"
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -40,23 +48,26 @@ class ThrottledLoginView(auth_views.LoginView):
     """
     Page de connexion protégée contre le force brute.
 
-    - 5 tentatives ratées dans la même adresse IP / utilisateur => blocage
+    L'identifiant est le **numéro de téléphone** (voir `ConnexionForm`).
+
+    - 5 tentatives ratées dans la même adresse IP / numéro => blocage
       de 5 minutes (réponse HTTP 429).
     - Une connexion réussie remet le compteur à zéro.
     - `never_cache` évite que la page de connexion soit mise en cache par le
       navigateur ou par un proxy.
     """
     template_name = 'budget_app/registration/login.html'
+    authentication_form = ConnexionForm
     redirect_authenticated_user = True
 
     def dispatch(self, request, *args, **kwargs):
         if request.method == 'POST' and not request.user.is_authenticated:
-            username = (request.POST.get('username') or '').strip()
-            key = _cache_key(request, username)
+            telephone = (request.POST.get('telephone') or '').strip()
+            key = _cache_key(request, telephone)
             if cache.get(f'{key}:blocked'):
                 logger.warning(
-                    "Tentative de connexion bloquée (IP=%s, user=%s)",
-                    _client_ip(request), username,
+                    "Tentative de connexion bloquée (IP=%s, telephone=%s)",
+                    _client_ip(request), normaliser_telephone(telephone),
                 )
                 return HttpResponse(
                     "<h1>429 - Trop de tentatives</h1>"
@@ -70,8 +81,8 @@ class ThrottledLoginView(auth_views.LoginView):
     def form_invalid(self, form):
         """Comptabilise l'échec et bloque la clé si la limite est atteinte."""
         request = self.request
-        username = (request.POST.get('username') or '').strip()
-        key = _cache_key(request, username)
+        telephone = (request.POST.get('telephone') or '').strip()
+        key = _cache_key(request, telephone)
 
         if cache.add(key, 1, LOGIN_ATTEMPT_WINDOW):
             failures = 1
@@ -87,8 +98,8 @@ class ThrottledLoginView(auth_views.LoginView):
         if failures > LOGIN_ATTEMPT_LIMIT:
             cache.set(f'{key}:blocked', True, LOGIN_ATTEMPT_WINDOW)
             logger.warning(
-                "Blocage des connexions pour IP=%s user=%s (%s échecs)",
-                _client_ip(request), username, failures,
+                "Blocage des connexions pour IP=%s telephone=%s (%s échecs)",
+                _client_ip(request), normaliser_telephone(telephone), failures,
             )
             return HttpResponse(
                 "<h1>429 - Trop de tentatives</h1>"
@@ -100,7 +111,7 @@ class ThrottledLoginView(auth_views.LoginView):
 
         messages.error(
             request,
-            "Identifiants incorrects "
+            "Numéro de téléphone ou mot de passe incorrect "
             f"({max(LOGIN_ATTEMPT_LIMIT - failures, 0)} tentative(s) restante(s)).",
         )
         return super().form_invalid(form)
@@ -108,8 +119,8 @@ class ThrottledLoginView(auth_views.LoginView):
     def form_valid(self, form):
         """Réinitialise le compteur à la connexion réussie."""
         request = self.request
-        username = (request.POST.get('username') or '').strip()
-        key = _cache_key(request, username)
+        telephone = (request.POST.get('telephone') or '').strip()
+        key = _cache_key(request, telephone)
         cache.delete(key)
         cache.delete(f'{key}:blocked')
         return super().form_valid(form)

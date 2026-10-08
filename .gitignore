@@ -17,6 +17,9 @@ venv/
 # Django generated files
 staticfiles/
 
+# Sauvegardes créées par deploy/update.sh
+sauvegardes/
+
 # Editor and OS files
 .vscode/
 .idea/

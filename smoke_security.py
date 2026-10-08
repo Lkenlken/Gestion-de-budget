@@ -7,6 +7,8 @@ Vérifie :
   3. Un utilisateur non administrateur ne peut pas supprimer (403).
   4. La connexion est bloquée après 5 échecs (HTTP 429).
   5. Un utilisateur non administrateur ne peut pas naviguer dans l'historique.
+  6. La connexion par NUMÉRO DE TÉLÉPHONE fonctionne et varie selon la
+     façon dont le numéro est saisi (0384160133 = 038 41 601 33 = +261...).
 
 Usage : python smoke_security.py
 """
@@ -19,6 +21,12 @@ import http.cookiejar
 
 BASE = 'http://127.0.0.1:8000'
 RESULTS = []
+
+# L'identifiant de connexion est le numéro de téléphone (champ « telephone »).
+ADMIN_TELEPHONE = '0340000001'
+ADMIN_PASSWORD = 'admin123'
+UTILISATEUR_TELEPHONE = '0340000002'
+UTILISATEUR_PASSWORD = 'user1234'
 
 
 def check(label, condition, detail=''):
@@ -34,12 +42,12 @@ def new_opener():
     return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
 
-def login(opener, username, password):
+def login(opener, telephone, password):
     page = opener.open(f'{BASE}/login/').read().decode('utf-8', 'replace')
     token = re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"', page).group(1)
     payload = urllib.parse.urlencode({
         'csrfmiddlewaretoken': token,
-        'username': username,
+        'telephone': telephone,
         'password': password,
         'next': '/',
     }).encode()
@@ -88,7 +96,7 @@ def test_headers():
 
 def test_method_and_rights():
     admin = new_opener()
-    login(admin, 'admin', 'admin123')
+    login(admin, ADMIN_TELEPHONE, ADMIN_PASSWORD)
 
     # 1. GET interdit
     try:
@@ -100,7 +108,7 @@ def test_method_and_rights():
 
     # 2. Utilisateur non admin -> 403
     user = new_opener()
-    login(user, 'utilisateur', 'user1234')
+    login(user, UTILISATEUR_TELEPHONE, UTILISATEUR_PASSWORD)
     page = user.open(f'{BASE}/').read().decode('utf-8', 'replace')
     depense_id = re.search(r'/depense/(\d+)/supprimer/', page)
     depense_id = depense_id.group(1) if depense_id else '1'
@@ -117,16 +125,16 @@ def test_method_and_rights():
 
     # 4. Non-admin ne peut pas forcer la navigation par mois
     other = new_opener()
-    login(other, 'utilisateur', 'user1234')
+    login(other, UTILISATEUR_TELEPHONE, UTILISATEUR_PASSWORD)
     forced = other.open(f'{BASE}/?b=1').read().decode('utf-8', 'replace')
     check("Impossible de forcer un autre mois en tant qu'utilisateur",
           'Mois précédent' not in forced and 'Mois suivant' not in forced)
 
 
 def test_login_throttle():
-    # Compte inexistant et nom unique à chaque exécution : on ne verrouille
-    # ni le vrai admin, ni un test précédent (clé = IP + nom d'utilisateur).
-    username = f'compte-de-test-{int(time.time())}'
+    # Numéro inexistant et unique à chaque exécution : on ne verrouille
+    # ni le vrai admin, ni un test précédent (clé = IP + numéro de téléphone).
+    telephone = f'090{int(time.time()) % 10000000:07d}'
     opener = new_opener()
     codes = []
     for attempt in range(6):
@@ -134,7 +142,7 @@ def test_login_throttle():
         token = re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"', page).group(1)
         payload = urllib.parse.urlencode({
             'csrfmiddlewaretoken': token,
-            'username': username,
+            'telephone': telephone,
             'password': f'mauvais-mdp-{attempt}',
             'next': '/',
         }).encode()
@@ -154,7 +162,7 @@ def test_login_throttle():
 def test_admin_pages():
     """L'administration doit rester accessible et afficher les montants."""
     admin = new_opener()
-    login(admin, 'admin', 'admin123')
+    login(admin, ADMIN_TELEPHONE, ADMIN_PASSWORD)
     for url in ('/admin/', '/admin/budget_app/budgetmensuel/',
                 '/admin/budget_app/depense/'):
         try:
@@ -177,9 +185,44 @@ def test_admin_pages():
           'Solde Restant' in page and '&lt;strong' not in page)
 
 
+def test_phone_login():
+    """La connexion se fait par numéro de téléphone, quel que soit le format."""
+    # Format national
+    session = login(new_opener(), ADMIN_TELEPHONE, ADMIN_PASSWORD)
+    check('Connexion avec le numéro national (0340000001)',
+          not str(session).startswith('HTTP'), f'retour={session}')
+
+    # Même numéro, écrit avec des espaces
+    session = login(new_opener(), '03 40 00 00 01', ADMIN_PASSWORD)
+    check('Connexion avec le numéro espacé (03 40 00 00 01)',
+          not str(session).startswith('HTTP'), f'retour={session}')
+
+    # Même numéro, au format international
+    session = login(new_opener(), '+261340000001', ADMIN_PASSWORD)
+    check('Connexion au format international (+261340000001)',
+          not str(session).startswith('HTTP'), f'retour={session}')
+
+    # Mauvais mot de passe : refusé
+    session = login(new_opener(), ADMIN_TELEPHONE, 'mauvais-mot-de-passe')
+    check('Numéro correct + mot de passe faux = refusé',
+          'login' in str(session), f'retour={session}')
+
+    # Numéro inconnu : refusé
+    session = login(new_opener(), '0341199999', ADMIN_PASSWORD)
+    check('Numéro inconnu = refusé', 'login' in str(session),
+          f'retour={session}')
+
+    # Un numéro valide belonging à un autre compte ne donne pas accès à l'admin
+    session = login(new_opener(), UTILISATEUR_TELEPHONE, ADMIN_PASSWORD)
+    check('Mot de passe admin refusé pour un autre numéro',
+          'login' in str(session), f'retour={session}')
+
+
 def main():
     print('--- En-têtes HTTP ---')
     test_headers()
+    print('\n--- Connexion par téléphone ---')
+    test_phone_login()
     print('\n--- Méthodes HTTP et droits ---')
     test_method_and_rights()
     print('\n--- Limitation des tentatives de connexion ---')

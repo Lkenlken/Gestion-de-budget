@@ -2,6 +2,8 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 
+from .telephone import formater_telephone, normaliser_telephone
+
 
 class BudgetMensuel(models.Model):
     """
@@ -129,6 +131,93 @@ class Depense(models.Model):
         return self.prix_unitaire * self.quantite
 
 
+class ProfilUtilisateur(models.Model):
+    """
+    Informations complémentaires d'un compte : son numéro de téléphone.
+
+    Le numéro est l'identifiant de connexion de l'application (à la place
+    du nom d'utilisateur). Il est stocké au format E.164 — `0384160133`
+    devient `+261384160133` — quel que soit la façon dont il a été saisi,
+    ce qui garantit qu'un même utilisateur ne peut pas être dupliqué.
+
+    Related name : `user.profil`
+    """
+
+    utilisateur = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='profil',
+        verbose_name="Utilisateur",
+    )
+    telephone = models.CharField(
+        max_length=20,
+        unique=True,
+        verbose_name="Téléphone",
+        help_text="Numéro utilisé pour se connecter. Ex : 0384160133",
+    )
+    fonction = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Fonction",
+        help_text="Facultatif : rôle dans l'association.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Créé le")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Modifié le")
+
+    class Meta:
+        verbose_name = "Profil utilisateur"
+        verbose_name_plural = "Profils utilisateurs"
+        ordering = ['utilisateur__username']
+
+    def __str__(self):
+        return f"{self.utilisateur} — {self.telephone_affiche}"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        numero = normaliser_telephone(self.telephone)
+        if not numero:
+            raise ValidationError({'telephone': "Le numéro de téléphone est obligatoire."})
+
+        doublon = (
+            ProfilUtilisateur.objects.filter(telephone=numero)
+            .exclude(pk=self.pk)
+            .first()
+        )
+        if doublon:
+            raise ValidationError({
+                'telephone': f"Ce numéro est déjà utilisé par « {doublon.utilisateur} »."
+            })
+        self.telephone = numero
+
+    def save(self, *args, **kwargs):
+        # La normalisation est appliquée à l'écriture : impossible de
+        # enregistrer le même numéro sous deux écritures différentes.
+        self.telephone = normaliser_telephone(self.telephone)
+        return super().save(*args, **kwargs)
+
+    @property
+    def telephone_affiche(self):
+        """Numéro formaté pour la lecture : `038 41 601 33`."""
+        return formater_telephone(self.telephone)
+
+
+def creer_profil(utilisateur, telephone, fonction=''):
+    """
+    Crée (ou met à jour) le profil téléphonique d'un utilisateur et
+    retourne le `ProfilUtilisateur` correspondant.
+    """
+    numero = normaliser_telephone(telephone)
+    if not numero:
+        raise ValueError("Numéro de téléphone vide.")
+
+    profil, created = ProfilUtilisateur.objects.update_or_create(
+        utilisateur=utilisateur,
+        defaults={'telephone': numero, 'fonction': fonction or ''},
+    )
+    return profil, created
+
+
 class PermissionUtilisateur(models.Model):
     """
     Autorisations d'accès d'un utilisateur de l'application.
@@ -187,6 +276,16 @@ class PermissionUtilisateur(models.Model):
         if self.peut_lire:
             return "Lecture seule"
         return "Aucun accès"
+
+
+def telephone_de(utilisateur):
+    """
+    Retourne le numéro de téléphone d'un utilisateur, formaté pour la
+    lecture (`038 41 601 33`), ou une chaîne vide s'il n'a pas encore de
+    profil renseigné.
+    """
+    profil = getattr(utilisateur, 'profil', None)
+    return profil.telephone_affiche if profil else ''
 
 
 def permission_de(utilisateur):

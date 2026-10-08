@@ -1,7 +1,82 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.models import User
 from django.utils.html import format_html
 
-from .models import BudgetMensuel, Depense
+from .models import BudgetMensuel, Depense, PermissionUtilisateur, ProfilUtilisateur
+from .forms import ProfilUtilisateurForm
+from .telephone import normaliser_telephone
+
+
+class ProfilUtilisateurInline(admin.StackedInline):
+    """
+    Le numéro de téléphone est modifiable directement depuis la fiche d'un
+    utilisateur, sans quitter l'administration Django.
+    """
+
+    model = ProfilUtilisateur
+    form = ProfilUtilisateurForm
+    can_delete = False
+    verbose_name = "Téléphone (identifiant de connexion)"
+    verbose_name_plural = "Téléphone (identifiant de connexion)"
+    extra = 0
+    fields = ['telephone', 'fonction']
+
+    def has_add_permission(self, request, obj=None):
+        # Un seul profil par utilisateur (OneToOne) : on ne propose le
+        # formulaire d'ajout que si le profil n'existe pas encore.
+        return obj is None or not hasattr(obj, 'profil')
+
+    def has_change_permission(self, request, obj=None):
+        return True
+
+
+class UtilisateurAdmin(UserAdmin):
+    """Administration des comptes, avec le numéro de téléphone en clair."""
+
+    inlines = [ProfilUtilisateurInline]
+    list_display = [
+        'username', 'telephone_affiche', 'first_name', 'last_name',
+        'email', 'is_staff', 'is_active',
+    ]
+    list_filter = ['is_staff', 'is_superuser', 'is_active']
+    search_fields = ['username', 'first_name', 'last_name', 'email', 'profil__telephone']
+
+    @admin.display(description='Téléphone', ordering='profil__telephone')
+    def telephone_affiche(self, obj):
+        return format_html('<strong>{}</strong>', obj.profil.telephone_affiche) \
+            if hasattr(obj, 'profil') else '—'
+
+
+admin.site.unregister(User)
+admin.site.register(User, UtilisateurAdmin)
+
+
+@admin.register(ProfilUtilisateur)
+class ProfilUtilisateurAdmin(admin.ModelAdmin):
+    list_display = ['utilisateur', 'telephone', 'telephone_affiche', 'fonction', 'updated_at']
+    search_fields = ['utilisateur__username', 'telephone']
+    raw_id_fields = ['utilisateur']
+    readonly_fields = ['created_at', 'updated_at']
+
+    @admin.display(description='Téléphone formaté')
+    def telephone_affiche(self, obj):
+        return obj.telephone_affiche
+
+
+@admin.register(PermissionUtilisateur)
+class PermissionUtilisateurAdmin(admin.ModelAdmin):
+    """
+    Autorisations lecture / écriture de chaque utilisateur, modifiables
+    par un administrateur depuis cette page.
+    """
+
+    list_display = ['utilisateur', 'statut', 'peut_lire', 'peut_ecrire', 'modifie_par', 'updated_at']
+    list_editable = ['peut_lire', 'peut_ecrire']
+    list_filter = ['peut_lire', 'peut_ecrire']
+    search_fields = ['utilisateur__username', 'utilisateur__profil__telephone']
+    raw_id_fields = ['utilisateur', 'modifie_par']
+    readonly_fields = ['updated_at']
 
 
 @admin.register(BudgetMensuel)
@@ -39,7 +114,7 @@ class BudgetMensuelAdmin(admin.ModelAdmin):
 class DepenseAdmin(admin.ModelAdmin):
     list_display = ['designation', 'budget', 'utilisateur', 'date', 'prix_unitaire', 'quantite', 'montant_total_display', 'created_at']
     list_filter = ['budget', 'utilisateur', 'date', 'created_at']
-    search_fields = ['designation', 'budget__mois', 'utilisateur__username']
+    search_fields = ['designation', 'budget__mois', 'utilisateur__username', 'utilisateur__profil__telephone']
     readonly_fields = ['created_at']
     ordering = ['-date', '-created_at']
     date_hierarchy = 'date'

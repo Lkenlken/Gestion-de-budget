@@ -15,7 +15,10 @@ pip install -r requirements.txt
 # Base de données (SQLite en développement)
 python manage.py migrate
 
-# Données de démonstration (budget Octobre 2026 + 6 dépenses)
+# Créer le compte administrateur (connexion par téléphone)
+python manage.py creer_admin
+
+# Données de démonstration facultatives (budget + dépenses fictives)
 python seed_demo.py
 
 # Lancer le serveur
@@ -24,15 +27,43 @@ python manage.py runserver
 
 L'application est ensuite accessible sur <http://127.0.0.1:8000/>.
 
-### Comptes de démonstration
+### Comptes et connexion par téléphone
 
-| Compte       | Identifiant    | Mot de passe | Rôle                                  |
-|--------------|----------------|--------------|---------------------------------------|
-| Admin        | `admin`        | `admin123`   | Crée/supprime les budgets, supprime les dépenses |
-| Utilisateur  | `utilisateur`  | `user1234`   | Consulte et ajoute des dépenses       |
+L'identifiant de connexion est le **numéro de téléphone** du compte, pas un
+nom d'utilisateur. Les trois écritures suivantes désignent le même compte :
 
-> ⚠️ En production : changez ces mots de passe, générez une vraie `SECRET_KEY`
-> dans `.env`, passez `DEBUG=False` et servez l'application en HTTPS.
+```
+0384160133      038 41 601 33      +261384160133
+```
+
+Les numéros sont stockés au format international (`+261384160133`) quel que
+soit le format saisi : impossible d'avoir deux comptes pour le même numéro.
+
+**Créer un administrateur** (le mot de passe est saisi en caché) :
+
+```bash
+python manage.py creer_admin
+# Nom du compte (ex : Andonilanitra) : Andonilanitra
+# Téléphone (ex : 0384160133)      : 0384160133
+# Mot de passe de « Andonilanitra » : ********
+```
+
+La commande crée aussi le profil et les droits (lecture + écriture). Elle est
+idempotente : relancer avec les mêmes valeurs met à jour le compte existant
+au lieu d'en créer un second.
+
+**Changer le mot de passe d'un compte existant** :
+
+```bash
+python manage.py changer_mot_de_passe --nom Andonilanitra
+```
+
+Le compte est identifié par son nom ou par son numéro de téléphone. Le mot de
+passe est saisi en caché, jamais en argument de ligne de commande, et toutes
+les sessions ouvertes avec l'ancien mot de passe sont déconnectées.
+
+> ⚠️ En production : utilisez un mot de passe long et unique, générez une vraie
+> `SECRET_KEY` dans `.env`, passez `DEBUG=False` et servez l'application en HTTPS.
 
 ---
 
@@ -65,29 +96,88 @@ L'application est ensuite accessible sur <http://127.0.0.1:8000/>.
 | Droits : suppression réservée aux administrateurs (403) | `views.supprimer_depense`        |
 | Échappement HTML systématique dans l'admin | `format_html` (jamais de HTML brut)             |
 | HSTS / cookies sécurisés en production   | `settings.py` (`if not DEBUG`)                  |
+| Numéro de téléphone unique et normalisé  | `budget_app/telephone.py`, `models.ProfilUtilisateur` |
+| Mot de passe haché (PBKDF2) + coût constant | `TelephoneBackend` (hérité du `ModelBackend`) |
 
 Tests automatisés :
 
 ```bash
 python smoke_test.py       # parcours complet : connexion → dépense → suppression → déconnexion
-python smoke_security.py   # en-têtes, droits, 405/403, blocage 429, administration
+python smoke_security.py   # en-têtes, connexion par téléphone, droits, 405/403, blocage 429
 ```
 
 ---
 
-## 4. Structure du projet
+## 4. Mise en ligne sur un serveur (Oracle Cloud Always Free)
+
+Le déploiement cible une machine Linux (Ubuntu) : le code reste sur GitHub, le
+serveur et la base de données n'existent que sur le serveur. **Rien à
+installer sur le poste de travail** : un `git push` suffit.
+
+### Première installation
+
+Sur le serveur, une fois le dépôt récupéré :
+
+```bash
+cd ~/kendevis
+cp .env.example .env
+# Renseigner au minimum : SECRET_KEY (nouveau), DEBUG=False, ALLOWED_HOSTS
+
+DOMAINE=ton.domaine.com NOM_UTILISATEUR=ubuntu bash deploy/install.sh
+```
+
+Le script installe Python, PostgreSQL, nginx, gunicorn et le certificat HTTPS
+gratuit (Let's Encrypt), puis crée la base et l'utilisateur PostgreSQL.
+
+### Créer le compte administrateur en ligne
+
+```bash
+cd ~/kendevis
+sudo -u ubuntu ./venv/bin/python manage.py creer_admin
+```
+
+### Mettre à jour après une modification du code
+
+```bash
+git push
+ssh ubuntu@ton.ip "cd /home/ubuntu/kendevis && bash deploy/update.sh"
+```
+
+`update.sh` sauvegarde la base avant toute migration, applique les migrations,
+collecte les fichiers statiques et redémarre le service.
+
+### Sauvegardes
+
+- `deploy/update.sh` dépose une sauvegarde horodatée dans `sauvegardes/`
+  avant chaque mise à jour et supprime celles de plus de 30 jours.
+- Pour une sauvegarde manuelle :
+
+```bash
+cd ~/kendevis
+./venv/bin/python manage.py dumpdata --indent 2 > donnees.json
+./venv/bin/python manage.py loaddata donnees.json   # restauration
+```
+
+---
+
+## 5. Structure du projet
 
 ```
 gestion_budget/
 ├── gestion_budget/          # Projet Django (settings, urls)
 ├── budget_app/
-│   ├── models.py            # BudgetMensuel, Depense
+│   ├── models.py            # BudgetMensuel, Depense, ProfilUtilisateur, PermissionUtilisateur
 │   ├── views.py             # dashboard, suppression, ThrottledLoginView
-│   ├── forms.py             # BudgetMensuelForm, DepenseForm
+│   ├── forms.py             # ConnexionForm (téléphone), DepenseForm
+│   ├── backends.py          # TelephoneBackend (connexion par téléphone)
+│   ├── telephone.py         # Normalisation des numéros
 │   ├── middleware.py        # En-têtes de sécurité (CSP, etc.)
+│   ├── management/commands/ # creer_admin
 │   ├── templatetags/        # math_extras (div, mul, abs, ar)
 │   ├── templates/           # base, dashboard, login
 │   └── static/budget_app/   # style.css, ui.js, budget_realtime.js
+├── deploy/                  # install.sh, update.sh (serveur Linux)
+├── .env.example             # Modèle de configuration
 ├── seed_demo.py             # Données de démonstration
 ├── smoke_test.py            # Tests de parcours
 ├── smoke_security.py        # Tests de sécurité
@@ -96,7 +186,7 @@ gestion_budget/
 
 ---
 
-## 5. Pistes à venir
+## 6. Pistes à venir
 
 - Budgets par catégorie (marché, outils, transport…) comme dans le devis.
 - Édition d'une dépense existante.

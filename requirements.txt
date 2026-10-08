@@ -1,3 +1,7 @@
 Django>=5.0,<7.0
 python-decouple>=3.8
 psycopg2-binary>=2.9.9
+
+# Production (serveur réel : gunicorn + WhiteNoise)
+gunicorn>=22.0 ; platform_system != "Windows"
+whitenoise>=6.6

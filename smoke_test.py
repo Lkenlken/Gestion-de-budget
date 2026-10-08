@@ -10,9 +10,25 @@ import http.cookiejar
 
 BASE = 'http://127.0.0.1:8000'
 
+# L'identifiant de connexion est le NUMÉRO DE TÉLÉPHONE de l'administrateur
+# (champ « telephone » du formulaire de connexion).
+ADMIN_TELEPHONE = '0340000001'
+ADMIN_PASSWORD = 'admin123'
+
 
 def flatten(html):
     return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', html))
+
+
+def nombre_depenses(texte):
+    """
+    Nombre de dépenses annoncé dans le tableau,lu dans le texte rendu.
+
+    On ne dépend pas d'un nombre en dur : le compteur est relu à chaque étape
+    et l'on vérifie qu'il augmente puis revient à sa valeur de départ.
+    """
+    trouve = re.search(r'(\d+)\s+d[ée]penses', texte)
+    return int(trouve.group(1)) if trouve else -1
 
 
 def main():
@@ -24,8 +40,8 @@ def main():
 
     payload = urllib.parse.urlencode({
         'csrfmiddlewaretoken': csrf,
-        'username': 'admin',
-        'password': 'admin123',
+        'telephone': ADMIN_TELEPHONE,
+        'password': ADMIN_PASSWORD,
         'next': '/',
     }).encode()
     req = urllib.request.Request(f'{BASE}/login/', data=payload, headers={'Referer': f'{BASE}/login/'})
@@ -115,14 +131,17 @@ if __name__ == '__main__':
     session = main()
     if session:
         opener, csrf = session
+        avant = nombre_depenses(flatten(opener.open(f'{BASE}/').read().decode('utf-8', 'replace')))
+
         after_add = add_expense(opener, csrf)
         text_add = flatten(after_add)
-        print('Après ajout :', '3000,00 Ar' in text_add or '3 000,00' in text_add,
-              '| 7 dépenses :', '7 dépenses' in text_add)
+        print(f'Après ajout : montant affiché =',
+              '3000,00 Ar' in text_add or '3 000,00' in text_add,
+              f'| dépenses : {avant} -> {nombre_depenses(text_add)}')
         after_del = delete_expense(opener, csrf, 'Dépense de test smoke')
         if after_del:
             text_del = flatten(after_del)
-            print('Après suppression :', '6 dépenses' in text_del,
-                  "| message de confirmation présent :",
+            print('Après suppression :', nombre_depenses(text_del) == avant,
+                  f"| message de confirmation présent :",
                   'a été supprimée' in text_del)
         logout(opener)

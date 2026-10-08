@@ -38,11 +38,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'budget_app',
+    'whitenoise.runserver_nostatic',
+    'budget_app.apps.BudgetAppConfig',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -51,6 +53,18 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'budget_app.middleware.SecurityHeadersMiddleware',
 ]
+
+# L'identifiant de connexion est le numéro de téléphone : `TelephoneBackend`
+# est essayé en premier, puis le `ModelBackend` de Django (indispensable à
+# l'administration Django et à la commande `createsuperuser`).
+AUTHENTICATION_BACKENDS = [
+    'budget_app.backends.TelephoneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+# Le modèle User de Django reste utilisé : chaque compte possède un profil
+# (`budget_app.ProfilUtilisateur`) qui porte son numéro de téléphone.
+AUTH_USER_MODEL = 'auth.User'
 
 ROOT_URLCONF = 'gestion_budget.urls'
 
@@ -76,25 +90,52 @@ WSGI_APPLICATION = 'gestion_budget.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-# SQLite for development
-DATABASES = {
+# --- Base de données --------------------------------------------------------
+# SQLite par défaut (développement et hébergement sur un disque persistant).
+# Pour PostgreSQL, il suffit de définir DB_ENGINE dans `.env` :
+#     DB_ENGINE=django.db.backends.postgresql
+#     DB_NAME=kendevis
+#     DB_USER=kendevis
+#     DB_PASSWORD=...
+#     DB_HOST=localhost
+#     DB_PORT=5432
+if config('DB_ENGINE', default='django.db.backends.sqlite3') == 'django.db.backends.sqlite3':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': config('DB_NAME', default=str(BASE_DIR / 'db.sqlite3')),
+            'OPTIONS': {
+                # Empêche "database is locked" quand plusieurs requêtes
+                # écrivent en même temps (délices, formulaire de dépense).
+                'timeout': 20,
+                'init_command': 'PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;',
+            },
+        }
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': config('DB_ENGINE', default='django.db.backends.postgresql'),
+            'NAME': config('DB_NAME', default='kendevis'),
+            'USER': config('DB_USER', default='kendevis'),
+            'PASSWORD': config('DB_PASSWORD', default=''),
+            'HOST': config('DB_HOST', default='localhost'),
+            'PORT': config('DB_PORT', default='5432'),
+            # Garde la connexion ouverte entre les requêtes : gain de vitesse
+            # notable sur un hébergement à faible coût (base locale).
+            'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=60, cast=int),
+        }
+    }
+
+# Cache en mémoire : les sessions et la limitation des tentatives de
+# connexion n'ont pas besoin de survivre à un redémarrage du serveur.
+# (Sur plusieurs instances, remplacer par Redis.)
+CACHES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'BACKEND': config('CACHE_BACKEND', default='django.core.cache.backends.locmem.LocMemCache'),
+        'LOCATION': 'kendevis',
     }
 }
-
-# PostgreSQL for production (uncomment and configure in .env for production)
-# DATABASES = {
-#     'default': {
-#         'ENGINE': config('DB_ENGINE', default='django.db.backends.postgresql'),
-#         'NAME': config('DB_NAME', default='gestion_budget'),
-#         'USER': config('DB_USER', default='postgres'),
-#         'PASSWORD': config('DB_PASSWORD', default=''),
-#         'HOST': config('DB_HOST', default='localhost'),
-#         'PORT': config('DB_PORT', default='5432'),
-#     }
-# }
 
 
 # Password validation
@@ -131,12 +172,27 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 # Les fichiers statiques des apps (budget_app/static) sont découverts automatiquement.
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ] if (BASE_DIR / 'static').exists() else []
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# WhiteNoise sert les fichiers statiques et médias directement depuis
+# l'application : plus besoin de Nginx pour les fichiers, et l'application
+# fonctionne seule (utile au premier démarrage sur l'hébergeur).
+WHITENOISE_AUTOREFRESH = DEBUG
+WHITENOISE_USE_FINDERS = DEBUG
+WHITENOISE_MAX_AGE = 0 if DEBUG else 60 * 60 * 24 * 30  # 30 jours en production
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {
+        'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'
+        if DEBUG
+        else 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+    },
+}
 
 # Media files (User uploads)
 MEDIA_URL = 'media/'
@@ -178,6 +234,14 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+    # Nginx joue le rôle de reverse proxy devant gunicorn : cette variable
+    # indique à Django que la requête est déjà arrivée en HTTPS. Sans elle,
+    # Django produit des redirections vers http:// en boucle.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Taille maximale d'un fichier envoyé (fichiers de l'administration).
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 
 # Custom User Model (if needed in future)
 # AUTH_USER_MODEL = 'budget_app.CustomUser'
