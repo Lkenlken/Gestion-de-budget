@@ -1,0 +1,170 @@
+{% extends 'budget_app/base.html' %}
+{% load l10n math_extras %}
+
+{% block title %}Statistiques - Kendevis{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 fade-up">
+    <div>
+        <h1 class="h4 fw-bold mb-1">
+            <i class="bi bi-pie-chart me-2 text-primary"></i>Statistiques
+        </h1>
+        <p class="text-muted small mb-0">
+            {% if budget %}
+                Analyse de {{ budget.mois }} &mdash; {{ nombre_depenses }} dépense{{ nombre_depenses|pluralize }}
+            {% else %}
+                Aucun budget sélectionné
+            {% endif %}
+        </p>
+    </div>
+</div>
+
+{% if not budget %}
+    <div class="alert alert-info shadow-sm">
+        <i class="bi bi-info-circle-fill me-2"></i>
+        Créez d'abord un budget mensuel depuis l'administration pour voir les statistiques.
+    </div>
+{% else %}
+
+    <!-- Répartition par poste -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+            <h2 class="h6 fw-bold mb-1">
+                <i class="bi bi-pie-chart me-2 text-primary"></i>Répartition par poste
+            </h2>
+            <p class="text-muted small">Les designations les plus coûteuses du mois.</p>
+
+            {% if par_poste %}
+                <div class="bar-list">
+                    {% for poste in par_poste %}
+                        <div class="bar-row">
+                            <div class="bar-label" title="{{ poste.designation }}">
+                                {{ poste.designation }}
+                                <span class="text-muted small">({{ poste.nombre }})</span>
+                            </div>
+                            <div class="bar-track">
+                                <div class="bar-fill" style="width: {% widthratio poste.total pics.poste 100 %}%"></div>
+                            </div>
+                            <div class="bar-value text-nowrap">
+                                {{ poste.total|floatformat:0|unlocalize }} Ar
+                                <span class="text-muted small">
+                                    {% widthratio poste.total total_general 100 %}%
+                                </span>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-muted mb-0">Aucune dépense enregistrée pour ce mois.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <!-- Par auteur -->
+        <div class="col-12 col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <h2 class="h6 fw-bold mb-3">
+                        <i class="bi bi-people me-2 text-primary"></i>Qui dépense
+                    </h2>
+                    {% if par_auteur %}
+                        <div class="bar-list">
+                            {% for ligne in par_auteur %}
+                                <div class="bar-row">
+                                    <div class="bar-label">
+                                        {{ ligne.username }}
+                                        <span class="text-muted small">{{ ligne.telephone }}</span>
+                                    </div>
+                                    <div class="bar-track">
+                                        <div class="bar-fill bar-fill-alt"
+                                             style="width: {% widthratio ligne.total pics.auteur 100 %}%"></div>
+                                    </div>
+                                    <div class="bar-value text-nowrap">
+                                        {{ ligne.total|floatformat:0|unlocalize }} Ar
+                                        <span class="text-muted small">{{ ligne.nombre }}</span>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">Aucune donnée.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Évolution mensuelle -->
+        <div class="col-12 col-lg-6">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <h2 class="h6 fw-bold mb-3">
+                        <i class="bi bi-graph-up-arrow me-2 text-primary"></i>Évolution par mois
+                    </h2>
+                    {% if evolution %}
+                        <div class="columns-chart">
+                            {% for point in evolution %}
+                                <div class="column-item">
+                                    <span class="column-value">{{ point.total|floatformat:0|unlocalize }}</span>
+                                    <div class="column-track">
+                                        <div class="column-fill"
+                                             style="height: {% widthratio point.total pics.mois 100 %}%"></div>
+                                    </div>
+                                    <span class="column-label">{{ point.libelle }}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">Aucune donnée.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chiffres clés -->
+    <div class="row g-3">
+        <div class="col-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body text-center">
+                    <h3 class="h5 fw-bold text-primary mb-0">
+                        {{ total_general|floatformat:0|unlocalize }}
+                    </h3>
+                    <p class="text-muted small mb-0">Total du mois (Ar)</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body text-center">
+                    <h3 class="h5 fw-bold mb-0">{{ nombre_depenses }}</h3>
+                    <p class="text-muted small mb-0">Nombre de dépenses</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body text-center">
+                    {% if budget and nombre_depenses %}
+                        <h3 class="h5 fw-bold mb-0">
+                            {% widthratio total_general budget.montant_initial 100 %}%
+                        </h3>
+                        <p class="text-muted small mb-0">Budget consommé</p>
+                    {% else %}
+                        <h3 class="h5 fw-bold mb-0">&mdash;</h3>
+                        <p class="text-muted small mb-0">Budget consommé</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body text-center">
+                    <h3 class="h5 fw-bold mb-0">{{ par_poste|length }}</h3>
+                    <p class="text-muted small mb-0">Postes distincts</p>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

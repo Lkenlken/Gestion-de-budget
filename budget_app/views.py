@@ -1,20 +1,44 @@
 import logging
+from decimal import Decimal
+from functools import wraps
 
 from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth import logout as django_logout
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.contrib import messages
 from django.core.cache import cache
+from django.db.models import Count, DecimalField, F, Sum
+from django.db.models.functions import Coalesce, TruncMonth
 from django.http import HttpResponse, HttpResponseForbidden
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from .models import BudgetMensuel, Depense
+from .models import BudgetMensuel, Depense, ProfilUtilisateur, permission_de, telephone_de
 from .forms import ConnexionForm, DepenseForm
-from .telephone import normaliser_telephone
+from .telephone import formater_telephone, normaliser_telephone
 
 logger = logging.getLogger(__name__)
+
+# Type utilisé pour sommer prix_unitaire × quantite : la multiplication de
+# deux champs produit un Decimal dont Django ne devine pas la précision.
+MONTANT = DecimalField(max_digits=14, decimal_places=2)
+ZERO = Decimal('0.00')
+
+
+def montant_total():
+    """
+    Somme des montants d'un queryset de dépenses (prix_unitaire × quantite).
+
+    Deux précautions :
+      * `Sum(a) * Sum(b)` est refusé par l'ORM : il faut multiplier les
+        champs de chaque ligne puis sommer ;
+      * `Coalesce(..., 0)` est refusé également — un Decimal et un entier
+        ne peuvent pas être mélangés. La valeur de repli est donc `Decimal`.
+    """
+    return Sum(F('prix_unitaire') * F('quantite'), output_field=MONTANT)
 
 # --- Paramètres de limitation des tentatives de connexion -----------------
 # Au bout de `LOGIN_ATTEMPT_LIMIT` échecs consécutifs, la connexion est
@@ -126,6 +150,52 @@ class ThrottledLoginView(auth_views.LoginView):
         return super().form_valid(form)
 
 
+def permission_requise(droit):
+    """
+    N'autorise l'accès que si l'utilisateur possède le droit demandé.
+
+    `permission_de()` crée la ligne d'autorisation manquante avec des droits
+    par défaut (lecture seule pour un utilisateur, lecture + écriture pour un
+    administrateur), ce qui évite qu'un compte créé hors de l'administration
+    se retrouve bloqué sans raison.
+
+    Le compte désactivé est renvoyé vers la déconnexion : la session devient
+    inutile et il est plus possible de rien écrire.
+
+    En cas de refus, la session est fermée et l'utilisateur est renvoyé vers la
+    page de connexion. Rediriger vers le tableau de bord serait une faute : le
+    tableau de bord est lui-même protégé, cela créerait une boucle de
+    redirection infinie.
+    """
+    def decorateur(vue):
+        @wraps(vue)
+        def enveloppe(request, *args, **kwargs):
+            if not request.user.is_authenticated:
+                return redirect('budget_app:login')
+
+            permission = permission_de(request.user)
+            if permission is not None and getattr(permission, droit, False):
+                return vue(request, *args, **kwargs)
+
+            # Aucune autorisation : on ferme la session et on explique.
+            django_logout(request)
+            if request.user.is_active:
+                messages.error(
+                    request,
+                    "Votre compte ne dispose pas des autorisations nécessaires. "
+                    "Contactez l'administrateur.",
+                )
+            else:
+                messages.error(
+                    request,
+                    "Votre compte a été désactivé. Contactez l'administrateur.",
+                )
+            return redirect('budget_app:login')
+
+        return enveloppe
+    return decorateur
+
+
 def _budget_selectionne(request):
     """
     Récupère le budget demandé via `?b=<id>`.
@@ -144,6 +214,7 @@ def _budget_selectionne(request):
 
 
 @login_required
+@permission_requise('peut_lire')
 def dashboard(request):
     """
     Vue principale du tableau de bord.
@@ -234,3 +305,204 @@ def supprimer_depense(request, depense_id):
     )
     messages.success(request, f"La dépense '{designation}' a été supprimée.")
     return redirect('budget_app:dashboard')
+
+
+@login_required
+@permission_requise('peut_lire')
+def depenses(request):
+    """
+    Onglet « Dépenses » : l'historique complet, tous mois confondus.
+
+    Filtres disponibles :
+      ?b=<id>      un mois précis (par défaut le plus récent)
+      ?q=texte     recherche sur la désignation
+      ?u=<id>      dépenses d'un utilisateur donné (réservé aux administrateurs)
+    """
+    budget = _budget_selectionne(request)
+    budgets = BudgetMensuel.objects.all()
+
+    depenses_requises = Depense.objects.select_related('budget', 'utilisateur')
+    if budget:
+        depenses_requises = depenses_requises.filter(budget=budget)
+
+    recherche = (request.GET.get('q') or '').strip()
+    if recherche:
+        depenses_requises = depenses_requises.filter(designation__icontains=recherche)
+
+    auteur = None
+    if request.user.is_staff and request.GET.get('u', '').isdigit():
+        auteur_id = int(request.GET['u'])
+        auteur = User.objects.filter(pk=auteur_id).first()
+        if auteur is not None:
+            depenses_requises = depenses_requises.filter(utilisateur=auteur)
+
+    depenses_requises = depenses_requises.order_by('-date', '-created_at')
+
+    total = depenses_requises.aggregate(
+        somme=Coalesce(montant_total(), ZERO),
+    )['somme'] or 0
+
+    context = {
+        'budget': budget,
+        'budgets': budgets,
+        'depenses': depenses_requises,
+        'total': total,
+        'recherche': recherche,
+        'auteur': auteur,
+        'auteurs': User.objects.order_by('username') if request.user.is_staff else None,
+        'profils_auteurs': (
+            ProfilUtilisateur.objects.select_related('utilisateur').order_by('utilisateur__username')
+            if request.user.is_staff else None
+        ),
+        'is_staff': request.user.is_staff,
+        'onglet': 'depenses',
+    }
+    return render(request, 'budget_app/depenses.html', context)
+
+
+@login_required
+@permission_requise('peut_lire')
+def statistiques(request):
+    """
+    Onglet « Statistiques » : où part l'argent, et qui le dépense.
+
+    Trois lectures complémentaires :
+      * répartition par poste (les désignations les plus coûteuses) ;
+      * répartition par auteur ;
+      * évolution mois par mois du montant dépensé.
+    """
+    budget = _budget_selectionne(request)
+
+    perimetre = Depense.objects.select_related('utilisateur')
+    if budget:
+        perimetre = perimetre.filter(budget=budget)
+    else:
+        perimetre = None
+
+    # --- Par poste ---------------------------------------------------
+    par_poste = []
+    if perimetre is not None:
+        lignes = perimetre.values('designation').annotate(
+            total=Coalesce(montant_total(), ZERO),
+            nombre=Count('id'),
+        ).order_by('-total')[:12]
+        par_poste = list(lignes)
+
+    # --- Par auteur --------------------------------------------------
+    par_auteur = []
+    if perimetre is not None:
+        lignes = perimetre.values(
+            'utilisateur__id',
+            'utilisateur__username',
+            'utilisateur__profil__telephone',
+        ).annotate(
+            total=Coalesce(montant_total(), ZERO),
+            nombre=Count('id'),
+        ).order_by('-total')
+        for ligne in lignes:
+            numero = ligne['utilisateur__profil__telephone']
+            par_auteur.append({
+                'id': ligne['utilisateur__id'],
+                'username': ligne['utilisateur__username'],
+                'telephone': formater_telephone(numero) if numero else '—',
+                'total': ligne['total'],
+                'nombre': ligne['nombre'],
+            })
+
+    # --- Évolution mensuelle ----------------------------------------
+    evolution = []
+    lignes = (
+        Depense.objects
+        .annotate(mois=TruncMonth('budget__created_at'))
+        .values('mois')
+        .annotate(total=Coalesce(montant_total(), ZERO))
+        .order_by('mois')
+    )
+    for ligne in lignes:
+        evolution.append({
+            'mois': ligne['mois'],
+            'total': ligne['total'],
+            'libelle': ligne['mois'].strftime('%b %Y') if ligne['mois'] else '—',
+        })
+
+    total_general = sum(item['total'] for item in par_poste) or 1
+    pic = max((item['total'] for item in par_poste), default=0) or 1
+    pic_auteur = max((item['total'] for item in par_auteur), default=0) or 1
+    pic_mois = max((item['total'] for item in evolution), default=0) or 1
+
+    context = {
+        'budget': budget,
+        'par_poste': par_poste,
+        'par_auteur': par_auteur,
+        'evolution': evolution,
+        'total_general': total_general,
+        'pics': {'poste': pic, 'auteur': pic_auteur, 'mois': pic_mois},
+        'nombre_depenses': perimetre.count() if perimetre is not None else 0,
+        'onglet': 'statistiques',
+    }
+    return render(request, 'budget_app/statistiques.html', context)
+
+
+@login_required
+@permission_requise('peut_lire')
+def utilisateurs(request):
+    """
+    Onglet « Utilisateurs » : qui a accès à l'application.
+
+    Tout le monde voit la liste (pour savoir qui enregistre les dépenses), mais
+    seuls les administrateurs peuvent changer les droits : le contrôle est
+    refait côté serveur au POST.
+    """
+    profils = ProfilUtilisateur.objects.select_related(
+        'utilisateur', 'utilisateur__permission_budget'
+    ).order_by('utilisateur__username')
+
+    contexte = {
+        'profils': profils,
+        'onglet': 'utilisateurs',
+        'is_staff': request.user.is_staff,
+    }
+
+    if request.method == 'POST' and request.user.is_staff:
+        identifiant = request.POST.get('utilisateur')
+        action = request.POST.get('action')
+        permission = permission_de(request.user)
+
+        if permission is not None and permission.peut_ecrire:
+            if identifiant.isdigit():
+                cible = User.objects.filter(pk=int(identifiant)).first()
+                if cible is not None and cible != request.user:
+                    if action == 'lire':
+                        permission_cible = permission_de(cible)
+                        permission_cible.peut_lire = not permission_cible.peut_lire
+                        permission_cible.modifie_par = request.user
+                        permission_cible.save()
+                        messages.success(
+                            request,
+                            f"Autorisation de lecture de « {cible.username} » mise à jour.",
+                        )
+                    elif action == 'ecrire':
+                        permission_cible = permission_de(cible)
+                        permission_cible.peut_ecrire = not permission_cible.peut_ecrire
+                        permission_cible.modifie_par = request.user
+                        permission_cible.save()
+                        messages.success(
+                            request,
+                            f"Autorisation d'écriture de « {cible.username} » mise à jour.",
+                        )
+                else:
+                    messages.error(
+                        request,
+                        "Impossible de modifier ce compte.",
+                    )
+        else:
+            messages.error(
+                request,
+                "Vous devez disposer du droit d'écriture pour modifier les accès.",
+            )
+        return redirect('budget_app:utilisateurs')
+
+    contexte['profils'] = ProfilUtilisateur.objects.select_related(
+        'utilisateur', 'utilisateur__permission_budget'
+    ).order_by('utilisateur__username')
+    return render(request, 'budget_app/utilisateurs.html', contexte)

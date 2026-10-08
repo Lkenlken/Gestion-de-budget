@@ -1,0 +1,120 @@
+{% extends 'budget_app/base.html' %}
+
+{% block title %}Utilisateurs - Kendevis{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 fade-up">
+    <div>
+        <h1 class="h4 fw-bold mb-1">
+            <i class="bi bi-people me-2 text-primary"></i>Utilisateurs
+        </h1>
+        <p class="text-muted small mb-0">
+            {{ profils|length }} compte{{ profils|length|pluralize }} disposant d'un numéro de téléphone.
+        </p>
+    </div>
+
+    {% if is_staff %}
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'admin:auth_user_changelist' %}">
+            <i class="bi bi-person-plus me-1"></i>Ajouter un compte
+        </a>
+    {% endif %}
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th scope="col">Utilisateur</th>
+                    <th scope="col">Téléphone</th>
+                    <th scope="col">Fonction</th>
+                    <th scope="col">Accès</th>
+                    <th scope="col">Membre depuis</th>
+                    {% if is_staff %}<th scope="col" class="text-end">Modifier</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for profil in profils %}
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="brand-mark" style="width:32px;height:32px;font-size:0.9rem;">
+                                    <i class="bi bi-person"></i>
+                                </span>
+                                <span>
+                                    {{ profil.utilisateur.username }}
+                                    {% if profil.utilisateur.is_superuser %}
+                                        <span class="badge bg-warning text-dark ms-1">Admin</span>
+                                    {% elif profil.utilisateur.is_staff %}
+                                        <span class="badge bg-info text-dark ms-1">Staff</span>
+                                    {% endif %}
+                                    {% if profil.utilisateur == user %}
+                                        <span class="badge bg-primary ms-1">Vous</span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </td>
+                        <td class="text-nowrap">{{ profil.telephone_affiche }}</td>
+                        <td class="text-muted small">{{ profil.fonction|default:"—" }}</td>
+                        <td>
+                            {% with permission=profil.utilisateur.permission_budget %}
+                                {% if permission %}
+                                    {% if permission.peut_ecrire %}
+                                        <span class="pill pill-success"><i class="bi bi-pencil"></i>Lecture + écriture</span>
+                                    {% elif permission.peut_lire %}
+                                        <span class="pill"><i class="bi bi-eye"></i>Lecture seule</span>
+                                    {% else %}
+                                        <span class="pill pill-danger"><i class="bi bi-lock"></i>Aucun accès</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="pill"><i class="bi bi-eye"></i>Lecture seule</span>
+                                {% endif %}
+                            {% endwith %}
+                        </td>
+                        <td class="text-muted small text-nowrap">{{ profil.utilisateur.date_joined|date:"d/m/Y" }}</td>
+                        {% if is_staff %}
+                            <td class="text-end text-nowrap">
+                                {% if profil.utilisateur == user %}
+                                    <span class="text-muted small">—</span>
+                                {% else %}
+                                    <form method="post" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="utilisateur" value="{{ profil.utilisateur.pk }}">
+                                        <button type="submit" name="action" value="lire"
+                                                class="btn btn-sm btn-outline-secondary"
+                                                title="Activer ou désactiver la lecture">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                        <button type="submit" name="action" value="ecrire"
+                                                class="btn btn-sm btn-outline-primary"
+                                                title="Activer ou désactiver l'écriture">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </td>
+                        {% endif %}
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            Aucun utilisateur ne dispose encore d'un numéro de téléphone.
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="alert alert-info small mt-4 shadow-sm">
+    <i class="bi bi-shield-check me-2"></i>
+    <strong>Comment ça marche :</strong>
+    un compte sans autorisation de lecture ne peut plus ouvrir le tableau de bord ;
+    il est renvoyé vers la page de connexion. Le numéro de téléphone est l'unique
+    identifiant : il doit être unique pour chaque personne.
+    {% if is_staff %}
+        La création d'un compte et l'attribution d'un numéro se font depuis l'administration.
+    {% endif %}
+</div>
+{% endblock %}

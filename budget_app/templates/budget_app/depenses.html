@@ -1,0 +1,135 @@
+{% extends 'budget_app/base.html' %}
+{% load l10n math_extras %}
+
+{% block title %}Dépenses - Kendevis{% endblock %}
+
+{% block content %}
+<!-- En-tête de l'onglet -->
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 fade-up">
+    <div>
+        <h1 class="h4 fw-bold mb-1">
+            <i class="bi bi-receipt me-2 text-primary"></i>Historique des dépenses
+        </h1>
+        <p class="text-muted small mb-0">
+            {% if budget %}
+                {{ budget.mois }} &mdash;
+            {% endif %}
+            {{ depenses|length }} ligne{{ depenses|length|pluralize }} pour
+            <strong>{{ total|floatformat:2|unlocalize }} Ar</strong>
+        </p>
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap">
+        <!-- Filtre par mois (réservé aux administrateurs) -->
+        {% if is_staff and budgets|length > 1 %}
+            <form method="get" class="d-flex gap-2">
+                {% if recherche %}<input type="hidden" name="q" value="{{ recherche }}">{% endif %}
+                <select name="b" class="form-select form-select-sm" onchange="this.form.submit()"
+                        aria-label="Choisir le mois">
+                    {% for item in budgets %}
+                        <option value="{{ item.pk }}" {% if budget and item.pk == budget.pk %}selected{% endif %}>
+                            {{ item.mois }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </form>
+        {% endif %}
+
+        <!-- Recherche -->
+        <form method="get" class="d-flex gap-2">
+            {% if budget %}<input type="hidden" name="b" value="{{ budget.pk }}">{% endif %}
+            <input type="search" name="q" value="{{ recherche }}" class="form-control form-control-sm"
+                   placeholder="Rechercher une dépense…" aria-label="Rechercher" style="min-width:180px;">
+            <button class="btn btn-sm btn-outline-primary" type="submit">
+                <i class="bi bi-search"></i>
+            </button>
+        </form>
+    </div>
+</div>
+
+{% if not budget %}
+    <div class="alert alert-info shadow-sm">
+        <i class="bi bi-info-circle-fill me-2"></i>
+        Aucun budget mensuel n'a encore été créé. L'historique est vide.
+    </div>
+{% elif not depenses %}
+    <div class="alert alert-secondary shadow-sm">
+        <i class="bi bi-inbox me-2"></i>
+        Aucune dépense ne correspond à cette recherche.
+        {% if recherche %}
+            <a href="{% url 'budget_app:depenses' %}" class="alert-link ms-1">Réinitialiser</a>
+        {% endif %}
+    </div>
+{% else %}
+    <!-- Filtre par auteur (administrateurs) -->
+    {% if is_staff %}
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <span class="text-muted small align-self-center">Auteur :</span>
+            <a class="btn btn-sm {% if not auteur %}btn-primary{% else %}btn-outline-secondary{% endif %}"
+               href="{% if budget %}?b={{ budget.pk }}{% else %}?{% endif %}{% if recherche %}&amp;q={{ recherche|urlencode }}{% endif %}">
+                Tous
+            </a>
+            {% for profil in profils_auteurs %}
+                <a class="btn btn-sm {% if auteur and auteur.pk == profil.utilisateur.pk %}btn-primary{% else %}btn-outline-secondary{% endif %}"
+                   href="?b={{ budget.pk }}&amp;u={{ profil.utilisateur.pk }}{% if recherche %}&amp;q={{ recherche|urlencode }}{% endif %}">
+                    {{ profil.utilisateur.username }}
+                </a>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table align-middle mb-0" id="table-depenses">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">Date</th>
+                        <th scope="col">Désignation</th>
+                        {% if is_staff %}<th scope="col">Auteur</th>{% endif %}
+                        <th scope="col" class="text-end">Prix unitaire</th>
+                        <th scope="col" class="text-center">Qté</th>
+                        <th scope="col" class="text-end">Total</th>
+                        {% if is_staff %}<th scope="col" class="text-end">Actions</th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for depense in depenses %}
+                        <tr>
+                            <td class="text-nowrap">{{ depense.date|date:"d/m/Y" }}</td>
+                            <td>{{ depense.designation }}</td>
+                            {% if is_staff %}
+                                <td class="text-muted small">{{ depense.utilisateur.username }}</td>
+                            {% endif %}
+                            <td class="text-end text-nowrap">{{ depense.prix_unitaire|floatformat:2|unlocalize }} Ar</td>
+                            <td class="text-center">{{ depense.quantite }}</td>
+                            <td class="text-end text-nowrap fw-bold">{{ depense.montant_total|floatformat:2|unlocalize }} Ar</td>
+                            {% if is_staff %}
+                                <td class="text-end">
+                                    <form method="post" action="{% url 'budget_app:supprimer_depense' depense.pk %}"
+                                          class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                title="Supprimer cette dépense">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            {% endif %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-light">
+                    <tr>
+                        <th colspan="{% if is_staff %}3{% else %}2{% endif %}">Total</th>
+                        {% if is_staff %}<th></th>{% endif %}
+                        <th class="text-end"></th>
+                        <th></th>
+                        <th class="text-end">{{ total|floatformat:2|unlocalize }} Ar</th>
+                        {% if is_staff %}<th></th>{% endif %}
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

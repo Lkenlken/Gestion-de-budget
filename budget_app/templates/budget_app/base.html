@@ -3,9 +3,21 @@
 <html lang="fr" data-theme="light">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description" content="Kendevis - Application web pour la gestion mensuelle assistée et automatique">
     <meta name="color-scheme" content="light dark">
+
+    <!-- Application installable sur l'écran d'accueil (PWA) -->
+    <link rel="manifest" href="{% url 'budget_app:manifest' %}">
+    <meta name="theme-color" content="#2563eb" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#16233d" media="(prefers-color-scheme: dark)">
+    <link rel="icon" type="image/png" sizes="64x64" href="{% static 'budget_app/icons/favicon.png' %}">
+    <link rel="apple-touch-icon" href="{% static 'budget_app/icons/apple-touch-icon.png' %}">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Kendevis">
+
     <title>{% block title %}Kendevis - Gestion de Budget{% endblock %}</title>
 
     <!-- Police Inter (chargée avant le rendu pour éviter les sauts de mise en page) -->
@@ -22,6 +34,7 @@
 
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{% static 'budget_app/css/style.css' %}">
+    <link rel="stylesheet" href="{% static 'budget_app/css/pwa_onglets.css' %}">
 
     <script>
         /* Applique le thème et la taille de police AVANT le premier rendu
@@ -61,20 +74,7 @@
 
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-1">
-                    {% if user.is_authenticated %}
-                        <li class="nav-item">
-                            <a class="nav-link" href="{% url 'budget_app:dashboard' %}">
-                                <i class="bi bi-speedometer2 me-1"></i>Tableau de bord
-                            </a>
-                        </li>
-                        {% if user.is_staff %}
-                            <li class="nav-item">
-                                <a class="nav-link" href="{% url 'admin:index' %}" target="_blank" rel="noopener">
-                                    <i class="bi bi-shield-lock me-1"></i>Administration
-                                </a>
-                            </li>
-                        {% endif %}
-                    {% endif %}
+                    <li class="nav-item d-none d-lg-block" data-pwa-hote></li>
 
                     <li class="vr d-none d-lg-block mx-1 text-muted"></li>
 
@@ -119,6 +119,14 @@
                                         {{ user.get_full_name|default:user.username }}
                                     </span>
                                 </li>
+                                {% if user.profil %}
+                                    <li>
+                                        <span class="dropdown-item-text small text-muted">
+                                            <i class="bi bi-telephone me-1"></i>
+                                            {{ user.profil.telephone_affiche }}
+                                        </span>
+                                    </li>
+                                {% endif %}
                                 <li>
                                     <span class="dropdown-item-text small text-muted">
                                         <i class="bi bi-calendar-check me-1"></i>
@@ -155,6 +163,52 @@
             </div>
         </div>
     </nav>
+
+    <!-- Onglets de navigation -->
+    {% if user.is_authenticated %}
+        <nav class="tabs-nav" aria-label="Sections de l'application">
+            <div class="container">
+                <ul class="tabs-list" role="tablist">
+                    <li role="presentation">
+                        <a class="tab-link {% if not onglet %}is-active{% endif %}"
+                           href="{% url 'budget_app:dashboard' %}" role="tab"
+                           aria-selected="{% if not onglet %}true{% else %}false{% endif %}">
+                            <i class="bi bi-speedometer2"></i><span>Tableau de bord</span>
+                        </a>
+                    </li>
+                    <li role="presentation">
+                        <a class="tab-link {% if onglet == 'depenses' %}is-active{% endif %}"
+                           href="{% url 'budget_app:depenses' %}" role="tab"
+                           aria-selected="{% if onglet == 'depenses' %}true{% else %}false{% endif %}">
+                            <i class="bi bi-receipt"></i><span>Dépenses</span>
+                        </a>
+                    </li>
+                    <li role="presentation">
+                        <a class="tab-link {% if onglet == 'statistiques' %}is-active{% endif %}"
+                           href="{% url 'budget_app:statistiques' %}" role="tab"
+                           aria-selected="{% if onglet == 'statistiques' %}true{% else %}false{% endif %}">
+                            <i class="bi bi-pie-chart"></i><span>Statistiques</span>
+                        </a>
+                    </li>
+                    <li role="presentation">
+                        <a class="tab-link {% if onglet == 'utilisateurs' %}is-active{% endif %}"
+                           href="{% url 'budget_app:utilisateurs' %}" role="tab"
+                           aria-selected="{% if onglet == 'utilisateurs' %}true{% else %}false{% endif %}">
+                            <i class="bi bi-people"></i><span>Utilisateurs</span>
+                        </a>
+                    </li>
+                    {% if user.is_staff %}
+                        <li role="presentation">
+                            <a class="tab-link tab-link-admin" href="{% url 'admin:index' %}"
+                               target="_blank" rel="noopener" role="tab">
+                                <i class="bi bi-shield-lock"></i><span>Administration</span>
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </nav>
+    {% endif %}
 
     <!-- Contenu principal -->
     <main class="container py-4">
@@ -226,6 +280,7 @@
 
     <!-- JS de l'application -->
     <script src="{% static 'budget_app/js/budget_realtime.js' %}"></script>
+    <script src="{% static 'budget_app/js/pwa.js' %}"></script>
     <script src="{% static 'budget_app/js/ui.js' %}"></script>
 
     {% block extra_js %}{% endblock %}

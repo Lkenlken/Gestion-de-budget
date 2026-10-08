@@ -69,6 +69,11 @@ les sessions ouvertes avec l'ancien mot de passe sont déconnectées.
 
 ## 2. Fonctionnalités
 
+- **Navigation par onglets** : Tableau de bord, Dépenses, Statistiques,
+  Utilisateurs, Administration.
+- **Application installable** (PWA) : une icône sur l'écran d'accueil du
+  téléphone ou de l'ordinateur, ouverture en plein écran, raccourcis vers
+  Budget / Dépenses / Stats, et ouverture du tableau de bord sans connexion.
 - **Tableau de bord** : budget initial, total dépensé, solde restant, barre de
   progression, compteurs animés et historique des dépenses.
 - **Ajout de dépense** : calcul du montant total en temps réel (prix unitaire ×
@@ -96,6 +101,7 @@ les sessions ouvertes avec l'ancien mot de passe sont déconnectées.
 | Droits : suppression réservée aux administrateurs (403) | `views.supprimer_depense`        |
 | Échappement HTML systématique dans l'admin | `format_html` (jamais de HTML brut)             |
 | HSTS / cookies sécurisés en production   | `settings.py` (`if not DEBUG`)                  |
+| Autorisations réellement appliquées       | `views.permission_requise` (session fermée si refus) |
 | Numéro de téléphone unique et normalisé  | `budget_app/telephone.py`, `models.ProfilUtilisateur` |
 | Mot de passe haché (PBKDF2) + coût constant | `TelephoneBackend` (hérité du `ModelBackend`) |
 
@@ -103,7 +109,7 @@ Tests automatisés :
 
 ```bash
 python smoke_test.py       # parcours complet : connexion → dépense → suppression → déconnexion
-python smoke_security.py   # en-têtes, connexion par téléphone, droits, 405/403, blocage 429
+python smoke_security.py   # en-têtes, téléphone, onglets, PWA, autorisations, 405/403, 429
 ```
 
 ---
@@ -171,11 +177,12 @@ gestion_budget/
 │   ├── forms.py             # ConnexionForm (téléphone), DepenseForm
 │   ├── backends.py          # TelephoneBackend (connexion par téléphone)
 │   ├── telephone.py         # Normalisation des numéros
+│   ├── pwa.py               # Manifeste et service worker
 │   ├── middleware.py        # En-têtes de sécurité (CSP, etc.)
-│   ├── management/commands/ # creer_admin
+│   ├── management/commands/ # creer_admin, changer_mot_de_passe
 │   ├── templatetags/        # math_extras (div, mul, abs, ar)
-│   ├── templates/           # base, dashboard, login
-│   └── static/budget_app/   # style.css, ui.js, budget_realtime.js
+│   ├── templates/           # base, dashboard, depenses, statistiques, utilisateurs, login
+│   └── static/budget_app/   # style.css, pwa_onglets.css, ui.js, pwa.js, sw.js, icons/
 ├── deploy/                  # install.sh, update.sh (serveur Linux)
 ├── .env.example             # Modèle de configuration
 ├── seed_demo.py             # Données de démonstration
@@ -194,3 +201,27 @@ gestion_budget/
 - Changer de mot de passe / mot de passe oublié / changer de pseudo.
 - Export CSV et graphiques de répartition.
 - Envoi de SMS ou appel direct depuis le pied de page.
+
+---
+
+## 7. Installer l'application
+
+Kendevis est une PWA : elle s'installe sur l'écran d'accueil sans passer par
+un magasin d'applications.
+
+| Appareil | Procédure |
+|---|---|
+| Android (Chrome) | menu ⋮ puis **Installer l'application** |
+| Ordinateur (Chrome, Edge) | icône d'installation à droite dans la barre d'adresse |
+| iPhone (Safari) | bouton **Partager** puis **Sur l'écran d'accueil** |
+
+Un bouton « Installer » apparaît aussi dans la barre de navigation quand le
+navigateur juge l'installation possible.
+
+Les icônes sont générées par `tools/generer_icones.py` (encodeur PNG maison,
+sans dépendance). Après modification du dessin :
+
+```bash
+python tools/generer_icones.py
+python manage.py collectstatic --noinput
+```

@@ -27,6 +27,10 @@ ADMIN_TELEPHONE = '0340000001'
 ADMIN_PASSWORD = 'admin123'
 UTILISATEUR_TELEPHONE = '0340000002'
 UTILISATEUR_PASSWORD = 'user1234'
+# Compte de démonstration volontairement privé de toute autorisation :
+# il doit être renvoyé vers la page de connexion.
+SANS_ACCES_TELEPHONE = '0340000003'
+SANS_ACCES_PASSWORD = 'user1234'
 
 
 def check(label, condition, detail=''):
@@ -218,11 +222,69 @@ def test_phone_login():
           'login' in str(session), f'retour={session}')
 
 
+def test_onglets_et_autorisations():
+    """Les quatre onglets répondent et un compte sans accès est bloqué."""
+    admin = new_opener()
+    login(admin, ADMIN_TELEPHONE, ADMIN_PASSWORD)
+
+    for url, marqueur in (
+        ('/', 'Budget Initial'),
+        ('/depenses/', 'Historique des dépenses'),
+        ('/statistiques/', 'Répartition par poste'),
+        ('/utilisateurs/', 'Téléphone'),
+    ):
+        try:
+            page = admin.open(f'{BASE}{url}').read().decode('utf-8', 'replace')
+            code = 200
+        except urllib.error.HTTPError as error:
+            page, code = '', error.code
+        check(f"Onglet {url} s'affiche", code == 200 and marqueur in page,
+              f'code={code}')
+        check(f"Les onglets sont dans la page {url}",
+              'tabs-nav' in page and 'bi-pie-chart' in page)
+
+    # Manifeste d'installation
+    try:
+        page = admin.open(f'{BASE}/manifest.webmanifest').read().decode('utf-8', 'replace')
+        code = 200
+    except urllib.error.HTTPError as error:
+        page, code = '', error.code
+    check('Manifeste PWA accessible', code == 200 and '"display"' in page,
+          f'code={code}')
+    check('Manifeste : icônes maskable et raccourcis',
+          'maskable' in page and 'shortcuts' in page)
+
+    # Service worker servi à la racine (sinon il ne contrôle que /static/)
+    try:
+        reponse = admin.open(f'{BASE}/sw.js')
+        portee = reponse.headers.get('Service-Worker-Allowed', '')
+        contenu = reponse.read().decode('utf-8', 'replace')
+        code = 200
+    except urllib.error.HTTPError as error:
+        portee, contenu, code = '', '', error.code
+    check('Service worker accessible', code == 200 and 'addEventListener' in contenu,
+          f'code={code}')
+    check('Service worker : portée racine autorisée', portee == '/', f'{portee}')
+
+    # Un compte sans autorisation de lecture ne doit rien voir.
+    sans_acces = new_opener()
+    login(sans_acces, SANS_ACCES_TELEPHONE, SANS_ACCES_PASSWORD)
+    for url in ('/', '/depenses/', '/statistiques/', '/utilisateurs/'):
+        try:
+            final = sans_acces.open(f'{BASE}{url}').geturl()
+        except urllib.error.HTTPError as error:
+            final = f'HTTP {error.code}'
+        check(f'Compte sans accès bloqué sur {url}', '/login/' in final,
+              f'atterri sur {final}')
+
+
 def main():
     print('--- En-têtes HTTP ---')
     test_headers()
     print('\n--- Connexion par téléphone ---')
     test_phone_login()
+    print('\n--- Onglets, PWA et autorisations ---')
+    test_onglets_et_autorisations()
     print('\n--- Méthodes HTTP et droits ---')
     test_method_and_rights()
     print('\n--- Limitation des tentatives de connexion ---')
