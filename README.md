@@ -52,6 +52,28 @@ La commande crée aussi le profil et les droits (lecture + écriture). Elle est
 idempotente : relancer avec les mêmes valeurs met à jour le compte existant
 au lieu d'en créer un second.
 
+**Rattacher des dépenses existantes à une catégorie** (après la mise en place
+des postes, sur un budget saisi auparavant) :
+
+```bash
+# Voir l'état actuel, sans rien modifier
+python manage.py categoriser_depenses --statistiques
+
+# Rattacher les dépenses non catégorisées à « Courses »
+python manage.py categoriser_depenses --categorie "Courses"
+
+# Sur un mois précis, en confirmant automatiquement
+python manage.py categoriser_depenses --categorie "Courses" --mois "Octobre 2026" --oui
+
+# Revenir en arrière
+python manage.py categoriser_depenses --categorie "Courses" --retirer
+```
+
+La commande affiche toujours un aperçu (nombre de lignes, montants, par mois)
+et demande confirmation, sauf avec `--oui`. Sans `--remplacer`, seules les
+dépenses **non encore** catégorisées sont touchées : des dépenses déjà
+correctement classées ne bougent pas.
+
 **Changer le mot de passe d'un compte existant** :
 
 ```bash
@@ -202,7 +224,7 @@ gestion_budget/
 │   ├── telephone.py         # Normalisation des numéros
 │   ├── pwa.py               # Manifeste et service worker
 │   ├── middleware.py        # En-têtes de sécurité (CSP, etc.)
-│   ├── management/commands/ # creer_admin, changer_mot_de_passe
+│   ├── management/commands/ # creer_admin, changer_mot_de_passe, categoriser_depenses
 │   ├── templatetags/        # math_extras (div, mul, abs, ar)
 │   ├── templates/           # base, dashboard, depenses, statistiques, repartition, utilisateurs, login
 │   └── static/budget_app/   # style.css, pwa_onglets.css, ui.js, pwa.js, sw.js, icons/
