@@ -197,6 +197,24 @@ ssh ubuntu@ton.ip "cd /home/ubuntu/kendevis && bash deploy/update.sh"
 `update.sh` sauvegarde la base avant toute migration, applique les migrations,
 collecte les fichiers statiques et redémarre le service.
 
+### ⚠️ Sur PythonAnywhere : cliquer sur « Reload »
+
+`deploy/update.sh` redémarre gunicorn, donc rien n'est oublié. Sur
+PythonAnywhere, le redémarrage est **manuel** : après un `git pull`, il faut
+cliquer sur le bouton vert **Reload** de l'onglet *Web app setup*.
+
+Ce n'est pas une précaution théorique. Avec `DEBUG=False`, Django met les
+gabarits en cache dans les processus : un `git pull` seul met bien les
+nouveaux fichiers sur le disque, mais les workers servent encore l'ancien
+HTML. Symptôme : le code Python est à jour (une commande de gestion
+fonctionne), mais l'affichage ne l'est pas.
+
+```bash
+# Après un git pull, vérifier que la version servie est bien à jour
+git log --oneline -1
+grep -c "tabs-nav" budget_app/templates/budget_app/base.html
+```
+
 ### Sauvegardes
 
 - `deploy/update.sh` dépose une sauvegarde horodatée dans `sauvegardes/`
