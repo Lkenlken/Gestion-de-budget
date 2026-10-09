@@ -153,6 +153,72 @@
     border: 1px solid transparent;
 }
 
+/* --- Choix de la catégorie dans le formulaire de dépense --------------- */
+
+.categorie-choix {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.categorie-puce {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 999px;
+    border: 2px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    transition: border-color var(--transition-fast), color var(--transition-fast),
+                background-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.categorie-puce:hover {
+    transform: translateY(-1px);
+    color: var(--teinte, var(--primary));
+}
+
+/* La case cochée prend la couleur du poste : c'est le retour visuel
+   immédiat du choix, avant même l'enregistrement. */
+input[data-categorie-choix]:checked + .categorie-puce {
+    border-color: var(--teinte, var(--primary));
+    background: var(--fond, var(--primary-soft));
+    color: var(--teinte, var(--primary));
+}
+
+input[data-categorie-choix]:focus-visible + .categorie-puce {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.categorie-puce-none {
+    --teinte: var(--text-muted);
+}
+
+/* --- Carte de catégorie cliquable (tableau de bord) -------------------- */
+
+.carte-categorie {
+    padding: 0.25rem 0.35rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.carte-categorie:hover,
+.carte-categorie:focus-visible {
+    background: var(--surface-2);
+    transform: translateY(-2px);
+    outline: none;
+}
+
+.carte-categorie:focus-visible {
+    box-shadow: 0 0 0 2px var(--primary);
+}
+
 /* L'icône d'une catégorie prend la couleur du poste ; sur une teinte très
    claire (jaune, ambre) l'icône turquoise de Bootstrap disparaîtrait sur le
    fond clair du thème, d'où un texte plus foncé calculé par le modèle. */

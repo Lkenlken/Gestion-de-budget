@@ -310,6 +310,21 @@ def test_categories():
     check('Un utilisateur simple reçoit 403 sur la répartition', code == 403,
           f'code={code}')
 
+    # Le formulaire de dépense doit proposer les catégories : un champ
+    # présent dans le formulaire mais absent du gabarit rendrait la
+    # catégorisation impossible depuis l'interface.
+    page_accueil = admin.open(f'{BASE}/').read().decode('utf-8', 'replace')
+    check('Formulaire de dépense : choix de catégorie affiché',
+          'categorie-puce' in page_accueil
+          and 'data-categorie-choix' in page_accueil)
+    check('Toutes les catégories sont proposées',
+          page_accueil.count('data-categorie-choix') >= 2,
+          f"{page_accueil.count('data-categorie-choix')} option(s)")
+    check('Une option « sans catégorie » reste possible',
+          'Sans catégorie' in page_accueil)
+    check('Les cartes de poste présélectionnent la catégorie',
+          'data-choisir-categorie' in page_accueil)
+
     # Un budget dont la somme ne tombe pas juste est refusé.
     page_repartition = admin.open(
         f'{BASE}/budget/{budget_id}/repartition/'

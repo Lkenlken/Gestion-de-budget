@@ -256,6 +256,30 @@ class DepenseForm(forms.ModelForm):
         self.fields['categorie'].required = False
         self.fields['categorie'].empty_label = '— Non catégorisée —'
 
+        # Catégorie actuellement choisie, que la saisie vienne d'un POST
+        # (formulaire renvoyé avec une erreur) ou de la base.
+        if self.is_bound:
+            actuel = self.data.get(self.add_prefix('categorie')) or ''
+        elif self.instance.pk:
+            actuel = self.instance.categorie_id or ''
+        else:
+            actuel = ''
+
+        # Liste des catégories présentées sous forme de boutons colorés plutôt
+        # que d'un menu déroulant : il y a peu de postes, et les voir tous
+        # d'un coup évite d'ouvrir une liste pour découvrir ce qui existe.
+        self.choix_categories = [
+            {
+                'id': categorie.pk,
+                'nom': categorie.nom,
+                'icone': categorie.icone,
+                'teinte': categorie.teinte,
+                'fond': categorie.fond,
+                'coche': str(categorie.pk) == str(actuel),
+            }
+            for categorie in self.fields['categorie'].queryset
+        ]
+
 
 class RepartitionForm(forms.Form):
     """

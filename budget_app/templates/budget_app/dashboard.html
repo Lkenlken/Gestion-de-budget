@@ -67,6 +67,11 @@
             <div class="row g-3">
                 {% for ligne in categories %}
                     <div class="col-12 col-md-6 col-xl-4">
+                        {# Cliquer sur un poste préselectionne sa catégorie dans
+                           le formulaire de saisie ci-dessous. #}
+                        <div class="carte-categorie" data-choisir-categorie="{{ ligne.categorie.pk }}"
+                             role="button" tabindex="0"
+                             title="Ajouter une dépense dans « {{ ligne.categorie.nom }} »">
                         <div class="d-flex justify-content-between align-items-baseline mb-1">
                             <span class="fw-semibold">
                                 <i class="bi {{ ligne.categorie.icone }} me-1" style="color: {{ ligne.categorie.teinte }};"></i>{{ ligne.categorie.nom }}
@@ -86,6 +91,7 @@
                             {% else %}
                                 Il reste {{ ligne.reste|floatformat:0|unlocalize }} Ar
                             {% endif %}
+                        </div>
                         </div>
                     </div>
                 {% endfor %}
@@ -221,6 +227,51 @@
                             {{ form.quantite }}
                             {% if form.quantite.errors %}
                                 <div class="text-danger small mt-1">{{ form.quantite.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold d-block">{{ form.categorie.label }}</label>
+                            {% if form.choix_categories %}
+                                <div class="categorie-choix" role="radiogroup"
+                                     aria-label="{{ form.categorie.label }}">
+                                    {% for choix in form.choix_categories %}
+                                        <input type="radio" class="visually-hidden"
+                                               name="{{ form.categorie.html_name }}"
+                                               id="categorie_{{ choix.id }}"
+                                               value="{{ choix.id }}"
+                                               data-categorie-choix
+                                               {% if choix.coche %}checked{% endif %}>
+                                        <label class="categorie-puce" for="categorie_{{ choix.id }}"
+                                               style="--teinte: {{ choix.teinte }}; --fond: {{ choix.fond }};">
+                                            <i class="bi {{ choix.icone }}"></i>{{ choix.nom }}
+                                        </label>
+                                    {% endfor %}
+
+                                    <input type="radio" class="visually-hidden"
+                                           name="{{ form.categorie.html_name }}"
+                                           id="categorie_0" value=""
+                                           data-categorie-choix
+                                           {% if not form.choix_categories|length or not form.instance.categorie_id %}checked{% endif %}>
+                                    <label class="categorie-puce categorie-puce-none" for="categorie_0">
+                                        <i class="bi bi-dash-circle"></i>Sans catégorie
+                                    </label>
+                                </div>
+                                <div class="form-text small">
+                                    La catégorie sert à suivre la consommation de chaque poste.
+                                    Un clic sur un poste ci-dessus la préselectionne.
+                                </div>
+                            {% else %}
+                                <div class="alert alert-warning py-2 mb-0 small">
+                                    <i class="bi bi-exclamation-triangle me-1"></i>
+                                    Aucune catégorie n'est définie.
+                                    {% if is_staff %}
+                                        <a href="{% url 'admin:budget_app_categoriebudget_changelist' %}">Créer les postes</a>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                            {% if form.categorie.errors %}
+                                <div class="text-danger small mt-1">{{ form.categorie.errors }}</div>
                             {% endif %}
                         </div>
 
@@ -372,4 +423,39 @@
     </div>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    /* Un clic sur une carte de catégorie (bloc « Suivi par catégorie »)
+       préselectionne cette catégorie dans le formulaire de saisie et y
+       amène le curseur : plus besoin d'ouvrir une liste déroulante pour
+       choisir le poste d'une dépense alimentaire. */
+    (function () {
+        var cartes = document.querySelectorAll('[data-choisir-categorie]');
+        if (!cartes.length) return;
+
+        var cases = document.querySelectorAll('input[data-categorie-choix]');
+        var designation = document.getElementById('id_designation');
+
+        function choisir(identifiant) {
+            cases.forEach(function (entree) {
+                if (entree.value === String(identifiant)) entree.checked = true;
+            });
+            if (designation) designation.focus();
+        }
+
+        cartes.forEach(function (carte) {
+            carte.addEventListener('click', function () {
+                choisir(carte.dataset.choisirCategorie);
+            });
+            carte.addEventListener('keydown', function (evenement) {
+                if (evenement.key === 'Enter' || evenement.key === ' ') {
+                    evenement.preventDefault();
+                    choisir(carte.dataset.choisirCategorie);
+                }
+            });
+        });
+    })();
+</script>
 {% endblock %}

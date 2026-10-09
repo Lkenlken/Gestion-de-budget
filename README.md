@@ -102,9 +102,11 @@ Exemple : budget initial de 250 000 Ar → courses 100 000 Ar + provisions
 150 000 Ar. La somme doit être **exactement** égale au budget initial, sinon
 l'enregistrement est refusé et le montant manquant est indiqué.
 
-3. **Saisir les dépenses** : chaque nouvelle dépense se rattache à une
-   catégorie. Le tableau de bord affiche alors la consommation de chaque poste
-   et signale les dépassements.
+3. **Saisir les dépenses** : dans le bloc *Nouvelle Dépense*, la catégorie se
+   choisit parmi des puces colorées — un clic sur un poste du bloc *Suivi par
+   catégorie* la préselectionne et amène le curseur dans le champ
+   *Désignation*. Le tableau de bord affiche alors la consommation de chaque
+   poste et signale les dépassements.
 
 ---
 
