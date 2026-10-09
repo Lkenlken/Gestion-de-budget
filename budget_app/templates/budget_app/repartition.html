@@ -49,15 +49,17 @@
         <div class="card shadow-sm border-0 mb-4">
             <div class="card-body">
                 <div class="row g-3">
-                    {% for champ in form %}
+                    {% for paire in form.paires %}
                         <div class="col-12 col-md-6">
-                            <label class="form-label d-flex align-items-center gap-2" for="{{ champ.id_for_label }}">
-                                <span class="cat-dot" style="--cat-couleur: #2563eb;"></span>
-                                {{ champ.label }}
+                            <label class="form-label d-flex align-items-center gap-2" for="{{ paire.champ.id_for_label }}">
+                                <span class="cat-dot" style="background: {{ paire.categorie.fond }};"></span>
+                                <i class="bi {{ paire.categorie.icone }}"
+                                   style="color: {{ paire.categorie.teinte }};"></i>
+                                {{ paire.champ.label }}
                             </label>
-                            {{ champ }}
-                            {% if champ.errors %}
-                                <div class="text-danger small mt-1">{{ champ.errors }}</div>
+                            {{ paire.champ }}
+                            {% if paire.champ.errors %}
+                                <div class="text-danger small mt-1">{{ paire.champ.errors }}</div>
                             {% endif %}
                         </div>
                     {% endfor %}
@@ -115,8 +117,8 @@
                             </td>
                             <td style="min-width:140px;">
                                 <div class="bar-track">
-                                    <div class="bar-fill {% if ligne.reste < 0 %}bar-fill-depasse{% endif %}"
-                                         style="width: {% widthratio ligne.taux 1 100 %}%"></div>
+                                    <div class="bar-fill"
+                                         style="width: {% widthratio ligne.taux 1 100 %}%; background: {{ ligne.categorie.fond }};"></div>
                                 </div>
                                 <span class="small text-muted">{{ ligne.pourcentage|floatformat:1|unlocalize }} %</span>
                             </td>

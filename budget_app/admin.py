@@ -11,7 +11,7 @@ from .models import (
     ProfilUtilisateur,
     RepartitionCategorie,
 )
-from .forms import ProfilUtilisateurForm
+from .forms import CategorieBudgetForm, ProfilUtilisateurForm
 from .telephone import normaliser_telephone
 
 
@@ -152,15 +152,16 @@ class CategorieBudgetAdmin(admin.ModelAdmin):
     list_editable = ['ordre', 'active']
     search_fields = ['nom']
     ordering = ['ordre', 'nom']
+    form = CategorieBudgetForm
+    change_form_template = 'admin/categoriebudget/change_form.html'
 
     @admin.display(description='Couleur')
     def couleur_apercu(self, obj):
-        if not obj.couleur:
-            return '—'
         return format_html(
             '<span style="display:inline-block;width:2.2rem;height:1.1rem;'
-            'border-radius:4px;border:1px solid #ccc;background:{};"></span> {}',
-            obj.couleur, obj.couleur,
+            'border-radius:4px;border:1px solid rgba(128,128,128,.4);'
+            'background:{};"></span> {}',
+            obj.fond, obj.nom_couleur,
         )
 
     @admin.display(description='Répartitions')

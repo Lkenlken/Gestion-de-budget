@@ -18,6 +18,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import http.cookiejar
+import os
+import sys
 
 BASE = 'http://127.0.0.1:8000'
 RESULTS = []
@@ -335,6 +337,66 @@ def test_categories():
         check('Le montant manquant est indiqué', 'Il manque' in texte)
 
 
+def test_palette_couleurs():
+    """
+    La couleur d'une catégorie se choisit par son nom, pas en hexadécimal.
+
+    Vérifie le menu déroulant de l'administration et la conversion des
+    anciennes valeurs.
+    """
+    admin = new_opener()
+    login(admin, ADMIN_TELEPHONE, ADMIN_PASSWORD)
+
+    try:
+        page = admin.open(
+            f'{BASE}/admin/budget_app/categoriebudget/add/'
+        ).read().decode('utf-8', 'replace')
+        code = 200
+    except urllib.error.HTTPError as error:
+        page, code = '', error.code
+
+    check('Fiche de catégorie accessible', code == 200, f'code={code}')
+    check('La couleur est une liste déroulante (pas un champ texte)',
+          'id_couleur' in page and '<select' in page
+          and 'name="couleur" class="vTextField"' not in page)
+    check('La liste propose des couleurs nommées',
+          'Cyan' in page and 'Rouge' in page and 'Bleu' in page)
+    check('La liste propose des dégradés',
+          'Bleu dégradé' in page and 'Rouge dégradé' in page)
+    check('Chaque option montre un aperçu de sa couleur',
+          'option-apercu' in page and 'data-fond' in page)
+    check('Aucun code hexadécimal n\'est demandé à l\'utilisateur',
+          'format hexadécimal' not in page)
+    check('Aperçu de couleur dans la fiche', 'couleur-apercu' in page)
+    check('Grille d\'icônes disponibles', 'grille-icones' in page)
+
+
+def test_conversion_couleurs():
+    """Les anciennes valeurs hexadécimales sont reconnues et converties."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from budget_app.couleurs import couleur_connue, fond, libelle
+
+    cas = [
+        ('#2563eb', 'bleu'),
+        ('#06b6d4', 'cyan'),
+        ('#dc3545', 'rouge'),
+        ('bleu', 'bleu'),
+        ('rouge-degrade', 'rouge-degrade'),
+        ('', 'bleu'),
+        ('nimporte-quoi', 'bleu'),
+    ]
+    for valeur, attendu in cas:
+        obtenu = couleur_connue(valeur)
+        check(f'Conversion {valeur!r} -> {attendu}', obtenu == attendu,
+              f'obtenu {obtenu!r}')
+
+    check('Un dégradé produit un linear-gradient',
+          fond('bleu-degrade').startswith('linear-gradient'))
+    check('Une couleur simple reste un hexadécimal',
+          fond('cyan') == '#06b6d4', fond('cyan'))
+    check('Libellé lisible', libelle('cyan-degrade') == 'Cyan dégradé')
+
+
 def main():
     print('--- En-têtes HTTP ---')
     test_headers()
@@ -344,6 +406,9 @@ def main():
     test_onglets_et_autorisations()
     print('\n--- Catégories de budget ---')
     test_categories()
+    print('\n--- Palette de couleurs ---')
+    test_palette_couleurs()
+    test_conversion_couleurs()
     print('\n--- Méthodes HTTP et droits ---')
     test_method_and_rights()
     print('\n--- Limitation des tentatives de connexion ---')

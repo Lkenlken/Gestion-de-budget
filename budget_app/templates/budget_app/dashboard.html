@@ -68,15 +68,17 @@
                 {% for ligne in categories %}
                     <div class="col-12 col-md-6 col-xl-4">
                         <div class="d-flex justify-content-between align-items-baseline mb-1">
-                            <span class="fw-semibold">{{ ligne.categorie.nom }}</span>
+                            <span class="fw-semibold">
+                                <i class="bi {{ ligne.categorie.icone }} me-1" style="color: {{ ligne.categorie.teinte }};"></i>{{ ligne.categorie.nom }}
+                            </span>
                             <span class="small text-muted">
                                 {{ ligne.depense|floatformat:0|unlocalize }} /
                                 {{ ligne.alloue|floatformat:0|unlocalize }} Ar
                             </span>
                         </div>
                         <div class="bar-track">
-                            <div class="bar-fill {% if ligne.reste < 0 %}bar-fill-depasse{% endif %}"
-                                 style="width: {% widthratio ligne.taux 1 100 %}%"></div>
+                            <div class="bar-fill"
+                                 style="width: {% widthratio ligne.taux 1 100 %}%; background: {{ ligne.categorie.fond }};"></div>
                         </div>
                         <div class="small mt-1 {% if ligne.reste < 0 %}text-danger{% else %}text-muted{% endif %}">
                             {% if ligne.reste < 0 %}

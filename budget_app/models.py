@@ -3,6 +3,18 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from decimal import Decimal
 
+from .couleurs import (
+    DEGRADES,
+    COULEURS,
+    COULEUR_PAR_DEFAUT,
+    couleur_connue,
+    fond as fond_css,
+    libelle as libelle_couleur,
+    rgba as rgba_couleur,
+    texte_lisible,
+    teinte_debut,
+)
+
 from .telephone import formater_telephone, normaliser_telephone
 
 
@@ -167,9 +179,9 @@ class CategorieBudget(models.Model):
         help_text="Nom d'icône Bootstrap Icons, ex : bi-basket2, bi-box-seam.",
     )
     couleur = models.CharField(
-        max_length=7, default='#2563eb', blank=True,
+        max_length=30, default=COULEUR_PAR_DEFAUT,
         verbose_name="Couleur",
-        help_text="Couleur au format hexadécimal, ex : #2563eb.",
+        help_text="Choisir une couleur ou un dégradé dans la liste.",
     )
     ordre = models.PositiveSmallIntegerField(
         default=0, verbose_name="Ordre d'affichage",
@@ -188,6 +200,41 @@ class CategorieBudget(models.Model):
 
     def __str__(self):
         return self.nom
+
+    def save(self, *args, **kwargs):
+        # La valeur enregistrée est toujours un nom connu de la palette :
+        # une saisie hors liste ne peut pas rendre une catégorie invisible.
+        self.couleur = couleur_connue(self.couleur)
+        return super().save(*args, **kwargs)
+
+    # --- Couleur ------------------------------------------------------
+    # Ces quatre propriétés traduisent le nom stocké (« bleu-degrade ») en
+    # ce que les gabarins savent manipuler : un libellé lisible, un aplat CSS,
+    # une version translucide et une couleur de texte contrastée.
+
+    @property
+    def nom_couleur(self):
+        return libelle_couleur(self.couleur)
+
+    @property
+    def fond(self):
+        return fond_css(self.couleur)
+
+    @property
+    def teinte(self):
+        return teinte_debut(self.couleur)
+
+    @property
+    def fond_doux(self):
+        return rgba_couleur(self.couleur, 0.14)
+
+    @property
+    def texte_sur_fond(self):
+        return texte_lisible(self.couleur)
+
+    @property
+    def est_degrade(self):
+        return couleur_connue(self.couleur) in DEGRADES
 
     @property
     def total_alloue(self):

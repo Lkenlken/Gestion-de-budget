@@ -1,0 +1,17 @@
+{% comment %}
+Une option de la liste des couleurs, avec un carré d'aperçu.
+
+`data-fond` porte la valeur CSS de la couleur ; le script de
+`CategorieBudgetAdmin` s'en sert pour repeindre l'aperçu en direct quand la
+sélection change.
+
+Ce gabarit n'est utilisé QUE par `CouleurSelect` (via `option_template_name`) :
+le gabarit `select_option.html` de Django reste intact pour tous les autres
+menus déroulants de l'administration.
+{% endcomment %}
+<option value="{{ widget.value|stringformat:'s' }}"{% include "django/forms/widgets/attrs.html" %}
+        data-fond="{{ widget.fond }}"
+        style="--option-teinte: {{ widget.teinte }};">
+    <span class="option-apercu" style="background: {{ widget.fond }};"></span>
+    {{ widget.label }}
+</option>

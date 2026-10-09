@@ -4,6 +4,15 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import User
 from decimal import Decimal
 
+from .couleurs import (
+    COULEURS,
+    COULEUR_PAR_DEFAUT,
+    DEGRADES,
+    ORDRE_COULEURS,
+    ORDRE_DEGRADES,
+    fond as fond_css,
+    teinte_debut,
+)
 from .models import (
     BudgetMensuel,
     CategorieBudget,
@@ -11,6 +20,70 @@ from .models import (
     ProfilUtilisateur,
 )
 from .telephone import normaliser_telephone
+
+
+class CouleurSelect(forms.Select):
+    """
+    Liste déroulante de couleurs, choisie par son nom.
+
+    Chaque option affiche un carré de la couleur réelle : on ne demande pas à
+    l'utilisateur de connaître un code hexadécimal.
+
+    Seul le gabarit des *options* est personnalisé. Le gabarit principal reste
+    celui de Django, qui gère correctement les groupes (`<optgroup>`) — et les
+    autres menus déroulants de l'administration ne sont pas affectés.
+    """
+
+    option_template_name = 'admin/widgets/couleur_option.html'
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        """Ajoute la valeur CSS et la teinte à chaque option du menu."""
+        option = super().create_option(
+            name, value, label, selected, index, subindex=subindex, attrs=attrs
+        )
+        option['fond'] = fond_css(value)
+        option['teinte'] = teinte_debut(value)
+        return option
+
+
+class CategorieBudgetForm(forms.ModelForm):
+    """Formulaire d'administration d'une catégorie de budget."""
+
+    class Meta:
+        model = CategorieBudget
+        fields = ['nom', 'icone', 'couleur', 'ordre', 'active']
+        widgets = {
+            'nom': forms.TextInput(attrs={
+                'class': 'vTextField',
+                'placeholder': 'Ex : Courses',
+            }),
+            'icone': forms.TextInput(attrs={
+                'class': 'vTextField',
+                'placeholder': 'Ex : bi-basket2',
+            }),
+            'ordre': forms.NumberInput(attrs={
+                'class': 'vSmallPositiveIntegerField',
+            }),
+            # Choix regroupés : couleurs simples d'abord, dégradés ensuite.
+            'couleur': CouleurSelect(
+                choices=(
+                    ('Couleurs', [
+                        (nom, COULEURS[nom][0]) for nom in ORDRE_COULEURS
+                    ]),
+                    ('Dégradés', [
+                        (nom, DEGRADES[nom][0]) for nom in ORDRE_DEGRADES
+                    ]),
+                ),
+                attrs={'class': 'vSelect'},
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['couleur'].help_text = (
+            "La couleur choisie colore la barre de progression et la pastille "
+            "de la catégorie dans toute l'application."
+        )
 
 
 class ConnexionForm(AuthenticationForm):
@@ -203,9 +276,11 @@ class RepartitionForm(forms.Form):
             ligne.categorie_id: ligne
             for ligne in budget.repartitions.select_related('categorie')
         }
+        self.paires = []
         for categorie in CategorieBudget.objects.filter(active=True).order_by('ordre', 'nom'):
+            nom_champ = f'categorie_{categorie.pk}'
             ligne = deja.get(categorie.pk)
-            self.fields[f'categorie_{categorie.pk}'] = forms.DecimalField(
+            self.fields[nom_champ] = forms.DecimalField(
                 required=False,
                 min_value=Decimal('0'),
                 max_digits=12,
@@ -219,6 +294,14 @@ class RepartitionForm(forms.Form):
                     'placeholder': '0.00',
                 }),
             )
+            # Le gabarit a besoin de la catégorie (pour sa couleur et son
+            # icône) autant que du champ : on les expose ensemble plutôt que
+            # de faire deviner l'appariement par l'ordre des champs.
+            self.paires.append({
+                'categorie': categorie,
+                'nom_champ': nom_champ,
+                'champ': self[nom_champ],
+            })
 
     def valeurs(self):
         """Retourne {identifiant_categorie: Decimal} pour les montants saisis."""

@@ -147,6 +147,19 @@
     flex: 0 0 auto;
 }
 
+/* Badge de catégorie dans l'historique des dépenses */
+.cat-badge {
+    font-weight: 600;
+    border: 1px solid transparent;
+}
+
+/* L'icône d'une catégorie prend la couleur du poste ; sur une teinte très
+   claire (jaune, ambre) l'icône turquoise de Bootstrap disparaîtrait sur le
+   fond clair du thème, d'où un texte plus foncé calculé par le modèle. */
+.bi[style*="color"] {
+    vertical-align: -0.1em;
+}
+
 /* Carte de catégorie dans les statistiques */
 .card .card .card-body {
     background: transparent;

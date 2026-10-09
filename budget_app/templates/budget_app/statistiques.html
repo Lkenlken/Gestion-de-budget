@@ -67,7 +67,10 @@
                                 <div class="card-body">
                                     <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
                                         <div>
-                                            <h3 class="h6 fw-bold mb-0">{{ ligne.categorie.nom }}</h3>
+                                            <h3 class="h6 fw-bold mb-0">
+                                                <i class="bi {{ ligne.categorie.icone }} me-1"
+                                                   style="color: {{ ligne.categorie.teinte }};"></i>{{ ligne.categorie.nom }}
+                                            </h3>
                                             <span class="text-muted small">
                                                 alloué : {{ ligne.alloue|floatformat:0|unlocalize }} Ar
                                             </span>
@@ -79,8 +82,8 @@
                                         {% endif %}
                                     </div>
                                     <div class="bar-track mb-2">
-                                        <div class="bar-fill {% if ligne.reste < 0 %}bar-fill-depasse{% endif %}"
-                                             style="width: {% widthratio ligne.taux 1 100 %}%"></div>
+                                        <div class="bar-fill"
+                                             style="width: {% widthratio ligne.taux 1 100 %}%; background: {{ ligne.categorie.fond }};"></div>
                                     </div>
                                     <div class="d-flex justify-content-between small">
                                         <span class="text-muted">dépensé</span>

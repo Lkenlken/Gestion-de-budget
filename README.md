@@ -90,9 +90,11 @@ les sessions ouvertes avec l'ancien mot de passe sont déconnectées.
 ### Répartir le budget par catégorie
 
 1. **Définir les postes** (une seule fois) : administration →
-   *Gestion de Budget → Catégories de budget*. Exemples : `Courses`
-   (`bi-basket2`), `Provisions` (`bi-box-seam`). Une catégorie déjà utilisée
-   ne peut plus être supprimée — la désactiver suffit.
+   *Gestion de Budget → Catégories de budget*. Pour chaque poste on choisit
+   une **couleur par son nom** dans une liste (bleu, cyan, rouge, ambre,
+   violet…) ou un **dégradé** (bleu dégradé, cyan dégradé…), avec un aperçu
+   visuel ; et une icône en cliquant dessus. Une catégorie déjà utilisée ne
+   peut plus être supprimée — la désactiver suffit.
 2. **Répartir le mois** : onglet *Statistiques* → *Répartir le budget*, ou
    directement dans la fiche du budget mensuel (administration).
 
@@ -240,6 +242,7 @@ gestion_budget/
 │   ├── forms.py             # ConnexionForm (téléphone), DepenseForm, RepartitionForm
 │   ├── backends.py          # TelephoneBackend (connexion par téléphone)
 │   ├── telephone.py         # Normalisation des numéros
+│   ├── couleurs.py          # Palette nommée des catégories (couleurs + dégradés)
 │   ├── pwa.py               # Manifeste et service worker
 │   ├── middleware.py        # En-têtes de sécurité (CSP, etc.)
 │   ├── management/commands/ # creer_admin, changer_mot_de_passe, categoriser_depenses

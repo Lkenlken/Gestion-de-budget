@@ -1,0 +1,168 @@
+{% extends "admin/change_form.html" %}
+{% load static %}
+
+{% comment %}
+Fiche d'édition d'une catégorie de budget.
+
+Personnalisée pour deux raisons :
+  * un aperçu de la couleur choisie, repeint en direct à la sélection ;
+  * la liste des icônes Bootstrap Icons disponibles, pour éviter les fautes
+    de frappe sur les noms (`bi-basket2` et non `bi-basket`).
+{% endcomment %}
+
+{% block extra_head %}
+{{ block.super }}
+<style>
+    /* Aperçu de la couleur, à côté du nom du champ. */
+    .couleur-apercu {
+        display: inline-flex;
+        align-items: center;
+        gap: .55rem;
+        margin-top: .35rem;
+    }
+    .couleur-apercu .pastille {
+        width: 3rem;
+        height: 1.6rem;
+        border-radius: 6px;
+        border: 1px solid rgba(128, 128, 128, .45);
+        background: #2563eb;
+        transition: background .25s ease;
+    }
+    .couleur-apercu .nom-couleur {
+        font-weight: 600;
+    }
+    /* Aperçu dans la liste déroulante : le carré est devant le libellé. */
+    .option-apercu {
+        display: inline-block;
+        width: .95em;
+        height: .95em;
+        border-radius: 3px;
+        border: 1px solid rgba(128, 128, 128, .5);
+        margin-right: .5em;
+        vertical-align: -.12em;
+    }
+    .vSelect option {
+        padding: 4px 8px;
+    }
+    .grille-icones {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+        gap: .35rem;
+        margin-top: .5rem;
+        max-height: 13rem;
+        overflow-y: auto;
+        padding: .5rem;
+        border: 1px solid rgba(128, 128, 128, .35);
+        border-radius: 6px;
+    }
+    .grille-icones button {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .35rem .5rem;
+        font-size: .8rem;
+        border: 1px solid rgba(128, 128, 128, .35);
+        border-radius: 5px;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        text-align: left;
+    }
+    .grille-icones button:hover {
+        background: rgba(128, 128, 128, .14);
+    }
+</style>
+{{ media }}
+{% endblock %}
+
+{% block admin_change_form_document_ready %}
+{{ block.super }}
+<script>
+    (function () {
+        // --- Couleur : aperçu vivant -----------------------------------
+        var selectCouleur = document.getElementById('id_couleur');
+        var apercu = document.getElementById('couleur-apercu');
+        if (selectCouleur && apercu) {
+            var pastille = apercu.querySelector('.pastille');
+            var nomCouleur = apercu.querySelector('.nom-couleur');
+
+            function rafraichir() {
+                var option = selectCouleur.options[selectCouleur.selectedIndex];
+                if (!option) return;
+                var fond = option.getAttribute('data-fond') || '#2563eb';
+                pastille.style.background = fond;
+                nomCouleur.textContent = option.textContent.trim();
+            }
+
+            selectCouleur.addEventListener('change', rafraichir);
+            rafraichir();
+        }
+
+        // --- Icône : clic pour remplir le champ ------------------------
+        var champIcone = document.getElementById('id_icone');
+        var grille = document.getElementById('grille-icones');
+        if (!champIcone || !grille) return;
+
+        grille.addEventListener('click', function (evenement) {
+            var bouton = evenement.target.closest('button');
+            if (!bouton) return;
+            evenement.preventDefault();
+            champIcone.value = bouton.dataset.icone;
+            champIcone.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+
+        // Pré-remplissage : le champ est vide à la création.
+        if (!champIcone.value) champIcone.value = 'bi-tag';
+    })();
+</script>
+{% endblock %}
+
+{% block after_related_objects %}
+{{ block.super }}
+{% if change %}
+    <div class="module" style="margin-top: 1rem;">
+        <h2>Aperçu</h2>
+        <div class="couleur-apercu" id="couleur-apercu">
+            <span class="pastille"></span>
+            <span class="nom-couleur"></span>
+        </div>
+        <p class="help" style="margin-top:.5rem;">
+            Cette couleur colore la barre de progression et la pastille de la
+            catégorie dans l'application. Un dégradé s'applique de gauche à
+            droite, comme sur le graphique de consommation.
+        </p>
+    </div>
+{% endif %}
+{% endblock %}
+
+{% block field_sets %}
+    {{ block.super }}
+    {% if not change %}
+        <fieldset class="module aligned wide">
+            <div class="form-row">
+                <div>
+                    <label class="vCheckboxLabel">Icônes disponibles (cliquez pour choisir)</label>
+                    <div class="grille-icones" id="grille-icones">
+                        <button type="button" data-icone="bi-tag">🏷️ bi-tag</button>
+                        <button type="button" data-icone="bi-basket2">🧺 bi-basket2</button>
+                        <button type="button" data-icone="bi-basket2-fill">🧺 bi-basket2-fill</button>
+                        <button type="button" data-icone="bi-box-seam">📦 bi-box-seam</button>
+                        <button type="button" data-icone="bi-cup-hot">☕ bi-cup-hot</button>
+                        <button type="button" data-icone="bi-fuel-pump">⛽ bi-fuel-pump</button>
+                        <button type="button" data-icone="bi-bus-front">🚌 bi-bus-front</button>
+                        <button type="button" data-icone="bi-house-door">🏠 bi-house-door</button>
+                        <button type="button" data-icone="bi-lightning-charge">⚡ bi-lightning-charge</button>
+                        <button type="button" data-icone="bi-droplet">💧 bi-droplet</button>
+                        <button type="button" data-icone="bi-bag-heart">❤️ bi-bag-heart</button>
+                        <button type="button" data-icone="bi-mortarboard">🎓 bi-mortarboard</button>
+                        <button type="button" data-icone="bi-heart-pulse">🩺 bi-heart-pulse</button>
+                        <button type="button" data-icone="bi-phone">📱 bi-phone</button>
+                        <button type="button" data-icone="bi-cart3">🛒 bi-cart3</button>
+                        <button type="button" data-icone="bi-wallet2">👛 bi-wallet2</button>
+                        <button type="button" data-icone="bi-graph-up">📈 bi-graph-up</button>
+                    </div>
+                </div>
+            </div>
+        </fieldset>
+    {% endif %}
+{% endblock %}

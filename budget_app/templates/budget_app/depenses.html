@@ -100,9 +100,9 @@
                             <td>{{ depense.designation }}</td>
                             <td class="small">
                                 {% if depense.categorie %}
-                                    <span class="badge rounded-pill"
-                                          style="background: {{ depense.categorie.couleur }}1a; color: {{ depense.categorie.couleur }};">
-                                        {{ depense.categorie.nom }}
+                                    <span class="badge rounded-pill cat-badge"
+                                          style="background: {{ depense.categorie.fond_doux }}; color: {{ depense.categorie.teinte }};">
+                                        <i class="bi {{ depense.categorie.icone }} me-1"></i>{{ depense.categorie.nom }}
                                     </span>
                                 {% else %}
                                     <span class="text-muted">—</span>
