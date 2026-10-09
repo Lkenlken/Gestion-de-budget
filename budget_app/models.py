@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+from decimal import Decimal
 
 from .telephone import formater_telephone, normaliser_telephone
 
@@ -72,6 +73,184 @@ class BudgetMensuel(models.Model):
         """
         return self.reste_budget() < 0
 
+    # --- Répartition par catégorie -------------------------------------
+
+    def total_repartition(self):
+        """Somme des montants répartis par catégorie pour ce budget."""
+        return self.repartitions.aggregate(
+            total=models.Sum('montant')
+        )['total'] or Decimal('0.00')
+
+    def repartition_incomplete(self):
+        """
+        Retourne True si le budget n'est pas (encore) réparti, ou si la
+        répartition ne tombe pas juste sur le montant initial.
+
+        Tant que c'est le cas, les indicateurs par catégorie n'ont pas de sens :
+        l'interface affiche alors une invitation à les renseigner.
+        """
+        if not self.repartitions.exists():
+            return True
+        return self.total_repartition() != self.montant_initial
+
+    def ecart_repartition(self):
+        """Différence entre le montant initial et la somme des répartitions."""
+        return self.montant_initial - self.total_repartition()
+
+    def categorie_depense(self, categorie):
+        """Montant dépensé dans une catégorie donnée pour ce budget."""
+        total = self.depenses.filter(categorie=categorie).aggregate(
+            total=models.Sum(
+                models.F('prix_unitaire') * models.F('quantite'),
+                output_field=models.DecimalField(max_digits=14, decimal_places=2),
+            )
+        )['total']
+        return total if total is not None else Decimal('0.00')
+
+    def resume_categories(self):
+        """
+        Renvoie la liste des catégories actives avec, pour chacune, le montant
+        alloué, le montant dépensé et le solde restant. Une catégorie sans
+        répartition est tout de même présente (montant alloué à zéro) afin que
+        l'utilisateur voie qu'il peut l'utiliser.
+        """
+        alloue = {
+            ligne.categorie_id: ligne
+            for ligne in self.repartitions.select_related('categorie')
+        }
+        depense = dict(
+            self.depenses
+            .exclude(categorie=None)
+            .values_list('categorie_id')
+            .annotate(total=models.Sum(
+                models.F('prix_unitaire') * models.F('quantite'),
+                output_field=models.DecimalField(max_digits=14, decimal_places=2),
+            ))
+        )
+
+        resume = []
+        for categorie in CategorieBudget.objects.filter(active=True):
+            ligne = alloue.get(categorie.pk)
+            montant_alloue = ligne.montant if ligne else Decimal('0.00')
+            montant_depense = depense.get(categorie.pk) or Decimal('0.00')
+            resume.append({
+                'categorie': categorie,
+                'ligne': ligne,
+                'alloue': montant_alloue,
+                'depense': montant_depense,
+                'reste': montant_alloue - montant_depense,
+                'pourcentage': (
+                    (montant_depense / montant_alloue * 100)
+                    if montant_alloue else Decimal('0.00')
+                ),
+                'taux': (
+                    min(100, float(montant_depense / montant_alloue * 100))
+                    if montant_alloue else 0.0
+                ),
+            })
+        return resume
+
+
+class CategorieBudget(models.Model):
+    """
+    Un poste de dépense (« Courses », « Provisions », « Transport »...).
+
+    Les catégories sont transversales : elles sont définies une seule fois par
+    l'administrateur puis réutilisées sur tous les mois. Elles servent à la
+    fois à répartir le budget initial et à rattacher les dépenses réelles.
+    """
+
+    nom = models.CharField(max_length=80, unique=True, verbose_name="Nom de la catégorie")
+    icone = models.CharField(
+        max_length=40, default='bi-tag', blank=True,
+        verbose_name="Icône",
+        help_text="Nom d'icône Bootstrap Icons, ex : bi-basket2, bi-box-seam.",
+    )
+    couleur = models.CharField(
+        max_length=7, default='#2563eb', blank=True,
+        verbose_name="Couleur",
+        help_text="Couleur au format hexadécimal, ex : #2563eb.",
+    )
+    ordre = models.PositiveSmallIntegerField(
+        default=0, verbose_name="Ordre d'affichage",
+        help_text="Les valeurs les plus basses apparaissent en premier.",
+    )
+    active = models.BooleanField(
+        default=True, verbose_name="Active",
+        help_text="Décochez pour masquer la catégorie sans effacer l'historique.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Catégorie de budget"
+        verbose_name_plural = "Catégories de budget"
+        ordering = ['ordre', 'nom']
+
+    def __str__(self):
+        return self.nom
+
+    @property
+    def total_alloue(self):
+        """Somme des montants alloués à cette catégorie, tous mois confondus."""
+        return sum((ligne.montant for ligne in self.repartitions.all()), Decimal('0.00'))
+
+
+class RepartitionCategorie(models.Model):
+    """
+    Part d'un budget mensuel fixée à une catégorie.
+
+    Exemple : pour Octobre 2026 et un budget initial de 250 000 Ar,
+        Courses     → 100 000 Ar
+        Provisions  → 150 000 Ar
+
+    La somme des lignes doit être égale au montant initial du budget : c'est
+    vérifié par `BudgetMensuel.verifier_repartition()`.
+    """
+
+    budget = models.ForeignKey(
+        BudgetMensuel,
+        on_delete=models.CASCADE,
+        related_name='repartitions',
+        verbose_name="Budget mensuel",
+    )
+    categorie = models.ForeignKey(
+        CategorieBudget,
+        on_delete=models.CASCADE,
+        related_name='repartitions',
+        verbose_name="Catégorie",
+    )
+    montant = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="Montant alloué (Ar)",
+    )
+    notes = models.CharField(max_length=255, blank=True, verbose_name="Précision")
+
+    class Meta:
+        verbose_name = "Répartition par catégorie"
+        verbose_name_plural = "Répartition par catégorie"
+        ordering = ['categorie__ordre', 'categorie__nom']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['budget', 'categorie'],
+                name='unique_repartition_par_categorie',
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.categorie.nom} — {self.montant:,.2f} Ar".replace(',', ' ')
+
+    def total_depense(self):
+        """Montant réellement dépensé dans cette catégorie pour ce budget."""
+        total = self.budget.depenses.filter(categorie=self.categorie).aggregate(
+            total=models.Sum(
+                models.F('prix_unitaire') * models.F('quantite'),
+                output_field=models.DecimalField(max_digits=14, decimal_places=2),
+            )
+        )['total']
+        return total if total is not None else Decimal('0.00')
+
+    def reste(self):
+        return self.montant - self.total_depense()
+
 
 class Depense(models.Model):
     """
@@ -109,6 +288,15 @@ class Depense(models.Model):
     quantite = models.PositiveIntegerField(
         default=1,
         verbose_name="Quantité"
+    )
+    categorie = models.ForeignKey(
+        CategorieBudget,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='depenses',
+        verbose_name="Catégorie",
+        help_text="Poste de rattachement (courses, provisions...).",
     )
     created_at = models.DateTimeField(
         auto_now_add=True,

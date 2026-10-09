@@ -278,6 +278,63 @@ def test_onglets_et_autorisations():
               f'atterri sur {final}')
 
 
+def test_categories():
+    """Répartition du budget par catégorie : réservée à l'administrateur."""
+    from decimal import Decimal
+
+    admin = new_opener()
+    login(admin, ADMIN_TELEPHONE, ADMIN_PASSWORD)
+    page = admin.open(f'{BASE}/').read().decode('utf-8', 'replace')
+    match = re.search(r'/budget/(\d+)/repartition/', page)
+    if not match:
+        check('Lien de répartition présent pour un administrateur', False)
+        return
+    budget_id = match.group(1)
+    check('Lien de répartition présent pour un administrateur', True)
+
+    # Un utilisateur simple ne voit pas le lien...
+    simple = new_opener()
+    login(simple, UTILISATEUR_TELEPHONE, UTILISATEUR_PASSWORD)
+    page_simple = simple.open(f'{BASE}/').read().decode('utf-8', 'replace')
+    check("Pas de lien de répartition pour un utilisateur simple",
+          '/repartition/' not in page_simple)
+
+    # ...et reçoit bien un refus s'il force l'URL.
+    try:
+        simple.open(f'{BASE}/budget/{budget_id}/repartition/')
+        code = 200
+    except urllib.error.HTTPError as error:
+        code = error.code
+    check('Un utilisateur simple reçoit 403 sur la répartition', code == 403,
+          f'code={code}')
+
+    # Un budget dont la somme ne tombe pas juste est refusé.
+    page_repartition = admin.open(
+        f'{BASE}/budget/{budget_id}/repartition/'
+    ).read().decode('utf-8', 'replace')
+    champs = re.findall(r'name="(categorie_\d+)"', page_repartition)
+    check('Formulaire de répartition rempli', bool(champs), f'{len(champs)} champ(s)')
+
+    if champs:
+        token = re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"',
+                          page_repartition).group(1)
+        # Montants volontairement faux : la somme ne peut pas tomber juste.
+        donnees = {
+            'csrfmiddlewaretoken': token,
+            champs[0]: '1.00',
+            'suite': '/depenses/',
+        }
+        payload = urllib.parse.urlencode(donnees).encode()
+        request = urllib.request.Request(
+            f'{BASE}/budget/{budget_id}/repartition/', data=payload,
+            headers={'Referer': f'{BASE}/budget/{budget_id}/repartition/'})
+        reponse = admin.open(request)
+        texte = flatten(reponse.read().decode('utf-8', 'replace'))
+        check('Une répartition qui ne tombe pas juste est refusée',
+              'doit être égale au budget initial' in texte)
+        check('Le montant manquant est indiqué', 'Il manque' in texte)
+
+
 def main():
     print('--- En-têtes HTTP ---')
     test_headers()
@@ -285,6 +342,8 @@ def main():
     test_phone_login()
     print('\n--- Onglets, PWA et autorisations ---')
     test_onglets_et_autorisations()
+    print('\n--- Catégories de budget ---')
+    test_categories()
     print('\n--- Méthodes HTTP et droits ---')
     test_method_and_rights()
     print('\n--- Limitation des tentatives de connexion ---')

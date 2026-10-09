@@ -3,9 +3,83 @@ from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from django.utils.html import format_html
 
-from .models import BudgetMensuel, Depense, PermissionUtilisateur, ProfilUtilisateur
+from .models import (
+    BudgetMensuel,
+    CategorieBudget,
+    Depense,
+    PermissionUtilisateur,
+    ProfilUtilisateur,
+    RepartitionCategorie,
+)
 from .forms import ProfilUtilisateurForm
 from .telephone import normaliser_telephone
+
+
+class RepartitionCategorieInline(admin.TabularInline):
+    """
+    Répartition du budget par catégorie, modifiable directement depuis la
+    fiche d'un budget mensuel.
+    """
+
+    model = RepartitionCategorie
+    extra = 1
+    fields = ['categorie', 'montant', 'notes']
+    autocomplete_fields = ['categorie']
+    verbose_name = "Part allouée"
+    verbose_name_plural = "Parts allouées par catégorie"
+
+
+@admin.register(BudgetMensuel)
+class BudgetMensuelAdmin(admin.ModelAdmin):
+    inlines = [RepartitionCategorieInline]
+    list_display = ['mois', 'montant_initial', 'total_alloue_display',
+                    'cree_par', 'created_at', 'total_depenses_display',
+                    'reste_budget_display', 'est_en_alerte']
+    list_filter = ['created_at', 'cree_par']
+    search_fields = ['mois']
+    readonly_fields = ['created_at', 'total_alloue_display', 'ecart_display']
+    fields = ['mois', 'montant_initial', 'total_alloue_display',
+              'ecart_display', 'cree_par', 'created_at']
+    ordering = ['-created_at']
+
+    @admin.display(description="Total réparti")
+    def total_alloue_display(self, obj):
+        return f"{obj.total_repartition():,.2f} Ar".replace(',', ' ')
+
+    @admin.display(description="Écart")
+    def ecart_display(self, obj):
+        if not obj.pk:
+            return '—'
+        ecart = obj.ecart_repartition()
+        if ecart == 0:
+            return format_html('<span style="color:#198754;">Répartition complète</span>')
+        if not obj.repartitions.exists():
+            return format_html('<span style="color:#dc3545;">Aucune répartition</span>')
+        signe = 'manquant' if ecart > 0 else 'en trop'
+        return format_html(
+            '<span style="color:#dc3545;">{:.2f} Ar {}</span>',
+            abs(ecart), signe,
+        )
+
+    def total_depenses_display(self, obj):
+        total = obj.total_depenses()
+        return f"{total:,.2f} Ar".replace(',', ' ')
+
+    @admin.display(description='Solde Restant')
+    def reste_budget_display(self, obj):
+        reste = obj.reste_budget()
+        color = '#198754' if reste >= 0 else '#dc3545'
+        # format_html échappe les valeurs puis concatène : pas d'injection HTML.
+        # Le montant est formaté avant d'être transmis (le ":.2f" ne s'applique
+        # pas aux chaînes déjà échappées).
+        return format_html(
+            '<strong style="color: {};">{} Ar</strong>', color,
+            f"{reste:,.2f}".replace(',', ' '),
+        )
+
+    @admin.display(boolean=True, description='Alerte (Solde < 0)')
+    def est_en_alerte(self, obj):
+        return obj.est_en_alerte()
 
 
 class ProfilUtilisateurInline(admin.StackedInline):
@@ -64,6 +138,68 @@ class ProfilUtilisateurAdmin(admin.ModelAdmin):
         return obj.telephone_affiche
 
 
+@admin.register(CategorieBudget)
+class CategorieBudgetAdmin(admin.ModelAdmin):
+    """
+    Postes de dépense : courses, provisions, transport...
+
+    Les catégories sont définies une fois et réutilisées sur tous les mois.
+    Leur suppression est protégée s'il y a déjà des données rattachées.
+    """
+
+    list_display = ['nom', 'icone', 'couleur_apercu', 'ordre', 'active',
+                    'nombre_repartitions', 'nombre_depenses']
+    list_editable = ['ordre', 'active']
+    search_fields = ['nom']
+    ordering = ['ordre', 'nom']
+
+    @admin.display(description='Couleur')
+    def couleur_apercu(self, obj):
+        if not obj.couleur:
+            return '—'
+        return format_html(
+            '<span style="display:inline-block;width:2.2rem;height:1.1rem;'
+            'border-radius:4px;border:1px solid #ccc;background:{};"></span> {}',
+            obj.couleur, obj.couleur,
+        )
+
+    @admin.display(description='Répartitions')
+    def nombre_repartitions(self, obj):
+        return obj.repartitions.count()
+
+    @admin.display(description='Dépenses')
+    def nombre_depenses(self, obj):
+        return obj.depenses.count()
+
+    def has_delete_permission(self, request, obj=None):
+        # Supprimer une catégorie Effacerait silencieusement l'historique :
+        # on préfère renvoyer vers « Active = non ».
+        if obj is not None and (obj.repartitions.exists() or obj.depenses.exists()):
+            return False
+        return super().has_delete_permission(request, obj)
+
+
+@admin.register(RepartitionCategorie)
+class RepartitionCategorieAdmin(admin.ModelAdmin):
+    list_display = ['budget', 'categorie', 'montant', 'total_depense_display',
+                    'reste_display']
+    list_filter = ['budget', 'categorie']
+    search_fields = ['budget__mois', 'categorie__nom']
+    autocomplete_fields = ['budget', 'categorie']
+
+    @admin.display(description='Dépensé')
+    def total_depense_display(self, obj):
+        return f"{obj.total_depense():,.2f} Ar".replace(',', ' ')
+
+    @admin.display(description='Reste')
+    def reste_display(self, obj):
+        reste = obj.reste()
+        couleur = '#198754' if reste >= 0 else '#dc3545'
+        return format_html(
+            '<strong style="color: {};">{:.2f} Ar</strong>', couleur, reste,
+        )
+
+
 @admin.register(PermissionUtilisateur)
 class PermissionUtilisateurAdmin(admin.ModelAdmin):
     """
@@ -79,42 +215,14 @@ class PermissionUtilisateurAdmin(admin.ModelAdmin):
     readonly_fields = ['updated_at']
 
 
-@admin.register(BudgetMensuel)
-class BudgetMensuelAdmin(admin.ModelAdmin):
-    list_display = ['mois', 'montant_initial', 'cree_par', 'created_at', 'total_depenses_display', 'reste_budget_display', 'est_en_alerte']
-    list_filter = ['created_at', 'cree_par']
-    search_fields = ['mois']
-    readonly_fields = ['created_at']
-    ordering = ['-created_at']
-
-    def total_depenses_display(self, obj):
-        total = obj.total_depenses()
-        return f"{total:,.2f} Ar".replace(',', ' ')
-    total_depenses_display.short_description = 'Total Dépenses'
-
-    def reste_budget_display(self, obj):
-        reste = obj.reste_budget()
-        color = '#198754' if reste >= 0 else '#dc3545'
-        # format_html échappe les valeurs puis concatène : pas d'injection HTML.
-        # Le montant est formaté avant d'être transmis (le ":.2f" ne s'applique
-        # pas aux chaînes déjà échappées).
-        return format_html(
-            '<strong style="color: {};">{} Ar</strong>', color,
-            f"{reste:,.2f}".replace(',', ' '),
-        )
-    reste_budget_display.short_description = 'Solde Restant'
-
-    def est_en_alerte(self, obj):
-        return obj.est_en_alerte()
-    est_en_alerte.boolean = True
-    est_en_alerte.short_description = 'Alerte (Solde < 0)'
-
-
 @admin.register(Depense)
 class DepenseAdmin(admin.ModelAdmin):
-    list_display = ['designation', 'budget', 'utilisateur', 'date', 'prix_unitaire', 'quantite', 'montant_total_display', 'created_at']
-    list_filter = ['budget', 'utilisateur', 'date', 'created_at']
-    search_fields = ['designation', 'budget__mois', 'utilisateur__username', 'utilisateur__profil__telephone']
+    autocomplete_fields = ['categorie']
+    list_display = ['designation', 'budget', 'categorie', 'utilisateur', 'date',
+                    'prix_unitaire', 'quantite', 'montant_total_display', 'created_at']
+    list_filter = ['budget', 'categorie', 'utilisateur', 'date', 'created_at']
+    search_fields = ['designation', 'budget__mois', 'utilisateur__username',
+                     'utilisateur__profil__telephone', 'categorie__nom']
     readonly_fields = ['created_at']
     ordering = ['-date', '-created_at']
     date_hierarchy = 'date'

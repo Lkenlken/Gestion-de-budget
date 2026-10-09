@@ -132,6 +132,26 @@
     background: linear-gradient(90deg, #f97316, #f59e0b);
 }
 
+/* Catégorie dépassée : la barre vire au rouge plutôt que de dépasser
+   visuellement le cadre, pour rester lisible sur fond sombre. */
+.bar-fill-depasse {
+    background: linear-gradient(90deg, #dc3545, #ef4444);
+}
+
+.cat-dot {
+    display: inline-block;
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 50%;
+    background: var(--cat-couleur, var(--primary));
+    flex: 0 0 auto;
+}
+
+/* Carte de catégorie dans les statistiques */
+.card .card .card-body {
+    background: transparent;
+}
+
 .bar-value {
     font-size: 0.8rem;
     font-weight: 600;

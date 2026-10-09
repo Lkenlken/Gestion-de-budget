@@ -65,12 +65,34 @@ les sessions ouvertes avec l'ancien mot de passe sont déconnectées.
 > ⚠️ En production : utilisez un mot de passe long et unique, générez une vraie
 > `SECRET_KEY` dans `.env`, passez `DEBUG=False` et servez l'application en HTTPS.
 
+### Répartir le budget par catégorie
+
+1. **Définir les postes** (une seule fois) : administration →
+   *Gestion de Budget → Catégories de budget*. Exemples : `Courses`
+   (`bi-basket2`), `Provisions` (`bi-box-seam`). Une catégorie déjà utilisée
+   ne peut plus être supprimée — la désactiver suffit.
+2. **Répartir le mois** : onglet *Statistiques* → *Répartir le budget*, ou
+   directement dans la fiche du budget mensuel (administration).
+
+Exemple : budget initial de 250 000 Ar → courses 100 000 Ar + provisions
+150 000 Ar. La somme doit être **exactement** égale au budget initial, sinon
+l'enregistrement est refusé et le montant manquant est indiqué.
+
+3. **Saisir les dépenses** : chaque nouvelle dépense se rattache à une
+   catégorie. Le tableau de bord affiche alors la consommation de chaque poste
+   et signale les dépassements.
+
 ---
 
 ## 2. Fonctionnalités
 
 - **Navigation par onglets** : Tableau de bord, Dépenses, Statistiques,
   Utilisateurs, Administration.
+- **Sous-budgets par catégorie** : l'administrateur répartit le budget initial
+  en postes (courses, provisions, transport…) ; chaque dépense est rattachée à
+  un poste, ce qui affiche « Courses : 50 000 / 100 000 Ar » et le solde
+  restant de chaque poste. La somme des parts doit être exactement égale au
+  budget initial.
 - **Application installable** (PWA) : une icône sur l'écran d'accueil du
   téléphone ou de l'ordinateur, ouverture en plein écran, raccourcis vers
   Budget / Dépenses / Stats, et ouverture du tableau de bord sans connexion.
@@ -102,6 +124,7 @@ les sessions ouvertes avec l'ancien mot de passe sont déconnectées.
 | Échappement HTML systématique dans l'admin | `format_html` (jamais de HTML brut)             |
 | HSTS / cookies sécurisés en production   | `settings.py` (`if not DEBUG`)                  |
 | Autorisations réellement appliquées       | `views.permission_requise` (session fermée si refus) |
+| Répartition du budget : administrateurs seulement | `views.repartition` (403 explicite)      |
 | Numéro de téléphone unique et normalisé  | `budget_app/telephone.py`, `models.ProfilUtilisateur` |
 | Mot de passe haché (PBKDF2) + coût constant | `TelephoneBackend` (hérité du `ModelBackend`) |
 
@@ -172,16 +195,16 @@ cd ~/kendevis
 gestion_budget/
 ├── gestion_budget/          # Projet Django (settings, urls)
 ├── budget_app/
-│   ├── models.py            # BudgetMensuel, Depense, ProfilUtilisateur, PermissionUtilisateur
+│   ├── models.py            # BudgetMensuel, Depense, CategorieBudget, RepartitionCategorie…
 │   ├── views.py             # dashboard, suppression, ThrottledLoginView
-│   ├── forms.py             # ConnexionForm (téléphone), DepenseForm
+│   ├── forms.py             # ConnexionForm (téléphone), DepenseForm, RepartitionForm
 │   ├── backends.py          # TelephoneBackend (connexion par téléphone)
 │   ├── telephone.py         # Normalisation des numéros
 │   ├── pwa.py               # Manifeste et service worker
 │   ├── middleware.py        # En-têtes de sécurité (CSP, etc.)
 │   ├── management/commands/ # creer_admin, changer_mot_de_passe
 │   ├── templatetags/        # math_extras (div, mul, abs, ar)
-│   ├── templates/           # base, dashboard, depenses, statistiques, utilisateurs, login
+│   ├── templates/           # base, dashboard, depenses, statistiques, repartition, utilisateurs, login
 │   └── static/budget_app/   # style.css, pwa_onglets.css, ui.js, pwa.js, sw.js, icons/
 ├── deploy/                  # install.sh, update.sh (serveur Linux)
 ├── .env.example             # Modèle de configuration

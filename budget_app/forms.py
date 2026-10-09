@@ -2,8 +2,14 @@ from django import forms
 from django.contrib.auth import authenticate
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import User
+from decimal import Decimal
 
-from .models import BudgetMensuel, Depense, ProfilUtilisateur
+from .models import (
+    BudgetMensuel,
+    CategorieBudget,
+    Depense,
+    ProfilUtilisateur,
+)
 from .telephone import normaliser_telephone
 
 
@@ -128,7 +134,7 @@ class DepenseForm(forms.ModelForm):
     """
     class Meta:
         model = Depense
-        fields = ['date', 'designation', 'prix_unitaire', 'quantite']
+        fields = ['date', 'designation', 'prix_unitaire', 'quantite', 'categorie']
         widgets = {
             'date': forms.DateInput(attrs={
                 'class': 'form-control',
@@ -151,12 +157,16 @@ class DepenseForm(forms.ModelForm):
                 'value': '1',
                 'id': 'id_quantite'
             }),
+            'categorie': forms.Select(attrs={
+                'class': 'form-select',
+            }),
         }
         labels = {
             'date': 'Date',
             'designation': 'Désignation',
             'prix_unitaire': 'Prix unitaire (Ar)',
             'quantite': 'Quantité',
+            'categorie': 'Catégorie',
         }
 
     def __init__(self, *args, **kwargs):
@@ -165,3 +175,59 @@ class DepenseForm(forms.ModelForm):
         from django.utils import timezone
         if not self.instance.pk:
             self.fields['date'].initial = timezone.now().date()
+        # Seules les catégories actives sont proposées, dans l'ordre choisi
+        # par l'administrateur.
+        self.fields['categorie'].queryset = CategorieBudget.objects.filter(
+            active=True
+        ).order_by('ordre', 'nom')
+        self.fields['categorie'].required = False
+        self.fields['categorie'].empty_label = '— Non catégorisée —'
+
+
+class RepartitionForm(forms.Form):
+    """
+    Saisie de la répartition du budget initial par catégorie.
+
+    Un champ par catégorie active, pré-rempli avec le montant déjà enregistré.
+    La somme est vérifiée par la vue : elle doit être exactement égale au
+    montant initial du budget.
+    """
+
+    def __init__(self, *args, budget=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.budget = budget
+        if budget is None:
+            return
+
+        deja = {
+            ligne.categorie_id: ligne
+            for ligne in budget.repartitions.select_related('categorie')
+        }
+        for categorie in CategorieBudget.objects.filter(active=True).order_by('ordre', 'nom'):
+            ligne = deja.get(categorie.pk)
+            self.fields[f'categorie_{categorie.pk}'] = forms.DecimalField(
+                required=False,
+                min_value=Decimal('0'),
+                max_digits=12,
+                decimal_places=2,
+                label=categorie.nom,
+                initial=ligne.montant if ligne else None,
+                widget=forms.NumberInput(attrs={
+                    'class': 'form-control',
+                    'step': '0.01',
+                    'min': '0',
+                    'placeholder': '0.00',
+                }),
+            )
+
+    def valeurs(self):
+        """Retourne {identifiant_categorie: Decimal} pour les montants saisis."""
+        resultat = {}
+        for nom in self.fields:
+            if not nom.startswith('categorie_'):
+                continue
+            identifiant = int(nom[len('categorie_'):])
+            valeur = self.cleaned_data.get(nom)
+            if valeur:
+                resultat[identifiant] = valeur
+        return resultat

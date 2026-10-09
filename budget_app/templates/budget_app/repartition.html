@@ -1,0 +1,161 @@
+{% extends 'budget_app/base.html' %}
+{% load l10n math_extras %}
+
+{% block title %}Répartition du budget - Kendevis{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 fade-up">
+    <div>
+        <h1 class="h4 fw-bold mb-1">
+            <i class="bi bi-diagram-3 me-2 text-primary"></i>Répartition du budget
+        </h1>
+        <p class="text-muted small mb-0">
+            {{ budget.mois }} &mdash; budget initial
+            <strong id="montant-initial" data-montant="{{ budget.montant_initial|unlocalize }}">
+                {{ budget.montant_initial|floatformat:2|unlocalize }} Ar
+            </strong>
+        </p>
+    </div>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'budget_app:statistiques' %}">
+        <i class="bi bi-arrow-left me-1"></i>Retour aux statistiques
+    </a>
+</div>
+
+<div class="alert alert-info shadow-sm">
+    <i class="bi bi-info-circle-fill me-2"></i>
+    La somme des montants saisis doit être <strong>exactement égale</strong> au budget initial.
+    Un montant laissé vide vaut zéro.
+</div>
+
+{% if not form.fields %}
+    <div class="alert alert-warning shadow-sm">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        Aucune catégorie n'est définie. Créez-les d'abord depuis l'administration :
+        <a href="{% url 'admin:budget_app_categoriebudget_changelist' %}">Catégories de budget</a>.
+    </div>
+{% else %}
+    <form method="post" novalidate>
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger shadow-sm">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body">
+                <div class="row g-3">
+                    {% for champ in form %}
+                        <div class="col-12 col-md-6">
+                            <label class="form-label d-flex align-items-center gap-2" for="{{ champ.id_for_label }}">
+                                <span class="cat-dot" style="--cat-couleur: #2563eb;"></span>
+                                {{ champ.label }}
+                            </label>
+                            {{ champ }}
+                            {% if champ.errors %}
+                                <div class="text-danger small mt-1">{{ champ.errors }}</div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <hr class="my-4">
+
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                    <div class="small text-muted">
+                        Affectez le total manuellement, ou cliquez sur « Compléter » pour
+                        Calculus le montant restant sur la dernière catégorie.
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="btn-completer">
+                        <i class="bi bi-calculator me-1"></i>Compléter le reste
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <input type="hidden" name="suite" value="{{ request.GET.suite|default:'' }}">
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check2-circle me-1"></i>Enregistrer la répartition
+            </button>
+            <a href="{% url 'budget_app:statistiques' %}" class="btn btn-outline-secondary">Annuler</a>
+        </div>
+    </form>
+{% endif %}
+
+<!-- Consommation actuelle par catégorie -->
+{% if categories %}
+    <h2 class="h6 fw-bold mt-5 mb-3">
+        <i class="bi bi-speedometer me-2 text-primary"></i>Consommation actuelle
+    </h2>
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">Catégorie</th>
+                        <th scope="col" class="text-end">Alloué</th>
+                        <th scope="col" class="text-end">Dépensé</th>
+                        <th scope="col" class="text-end">Reste</th>
+                        <th scope="col">Progression</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ligne in categories %}
+                        <tr>
+                            <td>{{ ligne.categorie.nom }}</td>
+                            <td class="text-end text-nowrap">{{ ligne.alloue|floatformat:2|unlocalize }} Ar</td>
+                            <td class="text-end text-nowrap">{{ ligne.depense|floatformat:2|unlocalize }} Ar</td>
+                            <td class="text-end text-nowrap {% if ligne.reste < 0 %}text-danger fw-bold{% endif %}">
+                                {{ ligne.reste|floatformat:2|unlocalize }} Ar
+                            </td>
+                            <td style="min-width:140px;">
+                                <div class="bar-track">
+                                    <div class="bar-fill {% if ligne.reste < 0 %}bar-fill-depasse{% endif %}"
+                                         style="width: {% widthratio ligne.taux 1 100 %}%"></div>
+                                </div>
+                                <span class="small text-muted">{{ ligne.pourcentage|floatformat:1|unlocalize }} %</span>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Complète la dernière catégorie avec le montant qui manque pour tomber
+    // juste sur le budget initial. Purement indicatif : le serveur revérifie.
+    (function () {
+        var bouton = document.getElementById('btn-completer');
+        var champs = Array.prototype.slice.call(
+            document.querySelectorAll('input[name^="categorie_"]')
+        );
+        if (!bouton || !champs.length) return;
+
+        bouton.addEventListener('click', function () {
+            var restant = parseFloat(document.getElementById('montant-initial').dataset.montant);
+            if (isNaN(restant)) return;
+
+            var dernier = null;
+            champs.forEach(function (champ) {
+                var valeur = parseFloat(champ.value) || 0;
+                restant -= valeur;
+                dernier = champ;
+            });
+
+            if (dernier) {
+                dernier.value = Math.max(0, restant).toFixed(2);
+                dernier.focus();
+            }
+        });
+    })();
+</script>
+{% endblock %}

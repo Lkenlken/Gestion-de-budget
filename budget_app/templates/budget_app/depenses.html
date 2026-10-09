@@ -85,6 +85,7 @@
                     <tr>
                         <th scope="col">Date</th>
                         <th scope="col">Désignation</th>
+                        <th scope="col">Catégorie</th>
                         {% if is_staff %}<th scope="col">Auteur</th>{% endif %}
                         <th scope="col" class="text-end">Prix unitaire</th>
                         <th scope="col" class="text-center">Qté</th>
@@ -97,6 +98,16 @@
                         <tr>
                             <td class="text-nowrap">{{ depense.date|date:"d/m/Y" }}</td>
                             <td>{{ depense.designation }}</td>
+                            <td class="small">
+                                {% if depense.categorie %}
+                                    <span class="badge rounded-pill"
+                                          style="background: {{ depense.categorie.couleur }}1a; color: {{ depense.categorie.couleur }};">
+                                        {{ depense.categorie.nom }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
                             {% if is_staff %}
                                 <td class="text-muted small">{{ depense.utilisateur.username }}</td>
                             {% endif %}
@@ -120,7 +131,7 @@
                 </tbody>
                 <tfoot class="table-light">
                     <tr>
-                        <th colspan="{% if is_staff %}3{% else %}2{% endif %}">Total</th>
+                        <th colspan="{% if is_staff %}4{% else %}3{% endif %}">Total</th>
                         {% if is_staff %}<th></th>{% endif %}
                         <th class="text-end"></th>
                         <th></th>

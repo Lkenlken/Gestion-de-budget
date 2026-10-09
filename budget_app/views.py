@@ -9,6 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib import messages
 from django.core.cache import cache
+from django.db import transaction
 from django.db.models import Count, DecimalField, F, Sum
 from django.db.models.functions import Coalesce, TruncMonth
 from django.http import HttpResponse, HttpResponseForbidden
@@ -16,8 +17,16 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from .models import BudgetMensuel, Depense, ProfilUtilisateur, permission_de, telephone_de
-from .forms import ConnexionForm, DepenseForm
+from .models import (
+    BudgetMensuel,
+    CategorieBudget,
+    Depense,
+    ProfilUtilisateur,
+    RepartitionCategorie,
+    permission_de,
+    telephone_de,
+)
+from .forms import ConnexionForm, DepenseForm, RepartitionForm
 from .telephone import formater_telephone, normaliser_telephone
 
 logger = logging.getLogger(__name__)
@@ -277,6 +286,8 @@ def dashboard(request):
         'budget_suivant': budget_suivant,
         'budgets_total': budgets_total,
         'peut_naviguer': request.user.is_staff and budgets_total > 1,
+        'categories': budget.resume_categories() if budget else [],
+        'repartition_manquante': budget.repartition_incomplete() if budget else True,
     }
     return render(request, 'budget_app/dashboard.html', context)
 
@@ -435,12 +446,85 @@ def statistiques(request):
         'par_poste': par_poste,
         'par_auteur': par_auteur,
         'evolution': evolution,
+        'par_categorie': budget.resume_categories() if budget else [],
+        'categories_actives': CategorieBudget.objects.filter(active=True),
+        'repartition_manquante': budget.repartition_incomplete() if budget else True,
+        'ecart_repartition': budget.ecart_repartition() if budget else Decimal('0.00'),
         'total_general': total_general,
         'pics': {'poste': pic, 'auteur': pic_auteur, 'mois': pic_mois},
         'nombre_depenses': perimetre.count() if perimetre is not None else 0,
         'onglet': 'statistiques',
     }
     return render(request, 'budget_app/statistiques.html', context)
+
+
+@login_required
+@permission_requise('peut_lire')
+def repartition(request, budget_id):
+    """
+    Répartition du budget initial par catégorie — administrateurs seulement.
+
+    GET  : affiche le formulaire, pré-rempli.
+    POST : enregistre. La somme des montants doit être exactement égale au
+    montant initial du budget ; sinon rien n'est enregistré et l'écart est
+    indiqué, pour éviter de laisser un budget incohérent.
+    """
+    budget = get_object_or_404(BudgetMensuel, pk=budget_id)
+
+    # Décision d'accès : la répartition du budget est une décision
+    # d'administration. Elle est vérifiée ici, pas seulement dans le
+    # gabarit, et un utilisateur non-admin reçoit une erreur 403 explicite
+    # plutôt qu'une page qui laisse croire à une répartition vide.
+    if not request.user.is_staff:
+        return HttpResponseForbidden(
+            "Action interdite : seuls les administrateurs peuvent répartir "
+            "le budget par catégorie."
+        )
+
+    form = RepartitionForm(request.POST or None, budget=budget)
+
+    if request.method == 'POST' and form.is_valid():
+        valeurs = form.valeurs()
+        total = sum(valeurs.values(), Decimal('0.00'))
+
+        if total != budget.montant_initial:
+            ecart = budget.montant_initial - total
+            form.add_error(
+                None,
+                "La somme des catégories "
+                f"({total:,.2f} Ar) doit être égale au budget initial "
+                f"({budget.montant_initial:,.2f} Ar). ".replace(',', ' ')
+                + f"Il manque {abs(ecart):,.2f} Ar. ".replace(',', ' ')
+                + ("Retirez ce montant." if ecart > 0 else "Réduisez d'autant."),
+            )
+        else:
+            with transaction.atomic():
+                budget.repartitions.exclude(
+                    categorie_id__in=valeurs.keys()
+                ).delete()
+                for categorie_id, montant in valeurs.items():
+                    RepartitionCategorie.objects.update_or_create(
+                        budget=budget,
+                        categorie_id=categorie_id,
+                        defaults={'montant': montant},
+                    )
+            logger.info(
+                "Budget %s réparti par %s",
+                budget.mois, request.user.username,
+            )
+            messages.success(
+                request,
+                f"Répartition enregistrée pour {budget.mois} "
+                f"({total:,.2f} Ar sur {len(valeurs)} catégories).".replace(',', ' '),
+            )
+            return redirect(request.POST.get('suite') or 'budget_app:statistiques')
+
+    return render(request, 'budget_app/repartition.html', {
+        'budget': budget,
+        'form': form,
+        'categories': budget.resume_categories(),
+        'onglet': 'statistiques',
+    })
 
 
 @login_required

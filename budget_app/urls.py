@@ -14,6 +14,10 @@ urlpatterns = [
     path('statistiques/', views.statistiques, name='statistiques'),
     path('utilisateurs/', views.utilisateurs, name='utilisateurs'),
 
+    # Répartition du budget par catégorie (administrateurs seulement)
+    path('budget/<int:budget_id>/repartition/', views.repartition,
+         name='repartition'),
+
     # Suppression de dépense (admin only, POST uniquement)
     path('depense/<int:depense_id>/supprimer/', views.supprimer_depense,
          name='supprimer_depense'),
