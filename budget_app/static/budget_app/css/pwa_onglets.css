@@ -199,6 +199,46 @@ input[data-categorie-choix]:focus-visible + .categorie-puce {
     --teinte: var(--text-muted);
 }
 
+/* --- Bascule « liste unique / par catégorie » (onglet Dépenses) -------- */
+
+.vue-bascule {
+    display: inline-flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    margin-bottom: 1rem;
+    border-radius: 999px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+}
+
+.vue-bascule-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.9rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border-radius: 999px;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.vue-bascule-btn:hover {
+    color: var(--primary);
+}
+
+.vue-bascule-btn.is-active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: var(--shadow-xs);
+}
+
+/* En-tête d'un bloc de catégorie : le liseré reprend la couleur du poste. */
+#groupe-categorie-0 .card-header {
+    border-left: 4px solid var(--text-muted);
+}
+
 /* --- Carte de catégorie cliquable (tableau de bord) -------------------- */
 
 .carte-categorie {

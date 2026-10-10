@@ -61,6 +61,38 @@
         {% endif %}
     </div>
 {% else %}
+    <!-- Sélecteur de vue : liste unique ou un tableau par catégorie -->
+    {% if profils_categories %}
+        <div class="vue-bascule" role="group" aria-label="Présentation de l'historique">
+            <a class="vue-bascule-btn {% if not vue_groupee %}is-active{% endif %}"
+               href="{% if categorie_filtree %}?c={{ categorie_filtree.pk }}&amp;vue=liste{% else %}?vue=liste{% endif %}{% if recherche %}&amp;q={{ recherche|urlencode }}{% endif %}">
+                <i class="bi bi-list-ul"></i> Liste unique
+            </a>
+            <a class="vue-bascule-btn {% if vue_groupee %}is-active{% endif %}"
+               href="?vue=groupe{% if categorie_filtree %}&amp;c={{ categorie_filtree.pk }}{% endif %}{% if recherche %}&amp;q={{ recherche|urlencode }}{% endif %}">
+                <i class="bi bi-diagram-3"></i> Par catégorie
+            </a>
+        </div>
+    {% endif %}
+
+    <!-- Filtre par catégorie -->
+    {% if profils_categories|length > 1 %}
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <span class="text-muted small align-self-center">Poste :</span>
+            <a class="btn btn-sm {% if not categorie_filtree %}btn-primary{% else %}btn-outline-secondary{% endif %}"
+               href="?{% if vue_groupee %}vue=groupe{% endif %}{% if recherche %}&amp;q={{ recherche|urlencode }}{% endif %}">
+                Tous
+            </a>
+            {% for categorie in profils_categories %}
+                <a class="btn btn-sm {% if categorie_filtree and categorie_filtree.pk == categorie.pk %}btn-primary{% else %}btn-outline-secondary{% endif %}"
+                   style="{% if categorie_filtree and categorie_filtree.pk == categorie.pk %}background: {{ categorie.fond }}; border-color: transparent;{% else %}color: {{ categorie.teinte }};{% endif %}"
+                   href="?c={{ categorie.pk }}{% if vue_groupee %}&amp;vue=groupe{% endif %}{% if recherche %}&amp;q={{ recherche|urlencode }}{% endif %}">
+                    <i class="bi {{ categorie.icone }} me-1"></i>{{ categorie.nom }}
+                </a>
+            {% endfor %}
+        </div>
+    {% endif %}
+
     <!-- Filtre par auteur (administrateurs) -->
     {% if is_staff %}
         <div class="d-flex flex-wrap gap-2 mb-3">
@@ -78,6 +110,71 @@
         </div>
     {% endif %}
 
+    {% if vue_groupee %}
+        {# Vue par catégorie : un bloc par poste, avec son sous-total. #}
+        <div class="d-flex flex-column gap-4">
+            {% for groupe in groupes %}
+                <div class="card shadow-sm border-0" id="groupe-categorie-{{ groupe.categorie.pk|default:'0' }}">
+                    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2"
+                         style="background: {{ groupe.categorie.fond_doux|default:'var(--surface-2)' }}; border-bottom-color: {{ groupe.categorie.teinte|default:'var(--border)' }};">
+                        <span class="fw-bold">
+                            {% if groupe.categorie %}
+                                <i class="bi {{ groupe.categorie.icone }} me-2"
+                                   style="color: {{ groupe.categorie.teinte }};"></i>{{ groupe.categorie.nom }}
+                            {% else %}
+                                <i class="bi bi-question-circle me-2 text-muted"></i>Sans catégorie
+                            {% endif %}
+                        </span>
+                        <span class="small">
+                            {{ groupe.nombre }} ligne{{ groupe.nombre|pluralize }}
+                            &bull; <strong>{{ groupe.total|floatformat:2|unlocalize }} Ar</strong>
+                        </span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th scope="col">Date</th>
+                                    <th scope="col">Désignation</th>
+                                    {% if is_staff %}<th scope="col">Auteur</th>{% endif %}
+                                    <th scope="col" class="text-end">Prix unitaire</th>
+                                    <th scope="col" class="text-center">Qté</th>
+                                    <th scope="col" class="text-end">Total</th>
+                                    {% if is_staff %}<th scope="col" class="text-end">Actions</th>{% endif %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for depense in groupe.depenses %}
+                                    <tr>
+                                        <td class="text-nowrap">{{ depense.date|date:"d/m/Y" }}</td>
+                                        <td>{{ depense.designation }}</td>
+                                        {% if is_staff %}
+                                            <td class="text-muted small">{{ depense.utilisateur.username }}</td>
+                                        {% endif %}
+                                        <td class="text-end text-nowrap">{{ depense.prix_unitaire|floatformat:2|unlocalize }} Ar</td>
+                                        <td class="text-center">{{ depense.quantite }}</td>
+                                        <td class="text-end text-nowrap fw-bold">{{ depense.montant_total|floatformat:2|unlocalize }} Ar</td>
+                                        {% if is_staff %}
+                                            <td class="text-end">
+                                                <form method="post" action="{% url 'budget_app:supprimer_depense' depense.pk %}"
+                                                      class="d-inline">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                            title="Supprimer cette dépense">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </form>
+                                            </td>
+                                        {% endif %}
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
     <div class="card shadow-sm border-0">
         <div class="table-responsive">
             <table class="table align-middle mb-0" id="table-depenses">
@@ -142,5 +239,6 @@
             </table>
         </div>
     </div>
+    {% endif %}
 {% endif %}
 {% endblock %}

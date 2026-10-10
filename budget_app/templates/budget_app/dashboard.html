@@ -67,8 +67,10 @@
             <div class="row g-3">
                 {% for ligne in categories %}
                     <div class="col-12 col-md-6 col-xl-4">
-                        {# Cliquer sur un poste préselectionne sa catégorie dans
-                           le formulaire de saisie ci-dessous. #}
+                        {% comment %}
+                        Cliquer sur un poste préselectionne sa catégorie dans
+                        le formulaire de saisie ci-dessous.
+                        {% endcomment %}
                         <div class="carte-categorie" data-choisir-categorie="{{ ligne.categorie.pk }}"
                              role="button" tabindex="0"
                              title="Ajouter une dépense dans « {{ ligne.categorie.nom }} »">

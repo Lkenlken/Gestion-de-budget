@@ -245,6 +245,27 @@ def test_onglets_et_autorisations():
         check(f"Les onglets sont dans la page {url}",
               'tabs-nav' in page and 'bi-pie-chart' in page)
 
+    # Historique : liste unique ou un tableau par catégorie
+    vue_liste = admin.open(f'{BASE}/depenses/').read().decode('utf-8', 'replace')
+    vue_groupee = admin.open(
+        f'{BASE}/depenses/?vue=groupe'
+    ).read().decode('utf-8', 'replace')
+
+    check('Onglet Dépenses : vue liste unique', vue_liste.count('<table') == 1,
+          f"{vue_liste.count('<table')} tableau(x)")
+    check('Onglet Dépenses : bascule de vue',
+          'vue=groupe' in vue_liste and 'vue-bascule' in vue_liste)
+    check('Onglet Dépenses : vue par catégorie avec un bloc par poste',
+          vue_groupee.count('groupe-categorie-') >= 1,
+          f"{vue_groupee.count('groupe-categorie-')} bloc(s)")
+    check('Onglet Dépenses : la vue groupée n_utilise pas la liste unique',
+          'groupe-categorie-' not in vue_liste)
+    check('Onglet Dépenses : filtre par poste',
+          '?c=' in vue_liste and 'Poste' in vue_liste)
+    check('Aucun commentaire de gabarit ne fuit dans la page',
+          'Cliquer sur un poste' not in vue_liste
+          and '{#' not in vue_liste)
+
     # Manifeste d'installation
     try:
         page = admin.open(f'{BASE}/manifest.webmanifest').read().decode('utf-8', 'replace')

@@ -112,6 +112,9 @@ l'enregistrement est refusé et le montant manquant est indiqué.
 
 ## 2. Fonctionnalités
 
+- **Historique par poste** : l'onglet Dépenses propose une vue « liste unique »
+  ou une vue « par catégorie » qui sépare complètement chaque poste avec son
+  sous-total, plus un filtre rapide sur un poste donné.
 - **Navigation par onglets** : Tableau de bord, Dépenses, Statistiques,
   Utilisateurs, Administration.
 - **Sous-budgets par catégorie** : l'administrateur répartit le budget initial

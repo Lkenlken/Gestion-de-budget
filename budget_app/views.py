@@ -328,11 +328,17 @@ def depenses(request):
       ?b=<id>      un mois précis (par défaut le plus récent)
       ?q=texte     recherche sur la désignation
       ?u=<id>      dépenses d'un utilisateur donné (réservé aux administrateurs)
+      ?c=<id>      dépenses d'une catégorie donnée
+      ?vue=groupe  un tableau par catégorie, avec un sous-total chacune
+
+    La vue « groupe » sépare complètement les postes : des courses et des
+    provisions sont deux budgeting différents, les mélanger dans une seule
+    liste masque le poids de chacun.
     """
     budget = _budget_selectionne(request)
     budgets = BudgetMensuel.objects.all()
 
-    depenses_requises = Depense.objects.select_related('budget', 'utilisateur')
+    depenses_requises = Depense.objects.select_related('budget', 'utilisateur', 'categorie')
     if budget:
         depenses_requises = depenses_requises.filter(budget=budget)
 
@@ -347,11 +353,47 @@ def depenses(request):
         if auteur is not None:
             depenses_requises = depenses_requises.filter(utilisateur=auteur)
 
+    categorie_filtree = None
+    if request.GET.get('c', '').isdigit():
+        categorie_filtree = CategorieBudget.objects.filter(
+            pk=int(request.GET['c'])
+        ).first()
+        if categorie_filtree is not None:
+            depenses_requises = depenses_requises.filter(categorie=categorie_filtree)
+
     depenses_requises = depenses_requises.order_by('-date', '-created_at')
 
     total = depenses_requises.aggregate(
         somme=Coalesce(montant_total(), ZERO),
     )['somme'] or 0
+
+    # --- Vue par catégorie : un bloc par poste, avec son sous-total ------
+    groupes = []
+    if request.GET.get('vue') == 'groupe':
+        par_categorie = {}
+        for depense in depenses_requises:
+            cle = depense.categorie_id
+            par_categorie.setdefault(cle, []).append(depense)
+        for categorie in CategorieBudget.objects.filter(active=True).order_by('ordre', 'nom'):
+            lignes = par_categorie.get(categorie.pk, [])
+            if not lignes:
+                continue
+            groupes.append({
+                'categorie': categorie,
+                'depenses': lignes,
+                'total': sum((d.montant_total for d in lignes), ZERO),
+                'nombre': len(lignes),
+            })
+        # Les dépenses sans catégorie ne doivent pas disparaître : sinon la
+        # vue « groupe » afficherait un total inférieur à celui annoncé.
+        orphelines = par_categorie.get(None, [])
+        if orphelines:
+            groupes.append({
+                'categorie': None,
+                'depenses': orphelines,
+                'total': sum((d.montant_total for d in orphelines), ZERO),
+                'nombre': len(orphelines),
+            })
 
     context = {
         'budget': budget,
@@ -365,6 +407,10 @@ def depenses(request):
             ProfilUtilisateur.objects.select_related('utilisateur').order_by('utilisateur__username')
             if request.user.is_staff else None
         ),
+        'vue_groupee': request.GET.get('vue') == 'groupe',
+        'groupes': groupes,
+        'categorie_filtree': categorie_filtree,
+        'profils_categories': CategorieBudget.objects.filter(active=True).order_by('ordre', 'nom'),
         'is_staff': request.user.is_staff,
         'onglet': 'depenses',
     }
