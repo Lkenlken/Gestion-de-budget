@@ -1,6 +1,8 @@
 import logging
+import re
 from decimal import Decimal
 from functools import wraps
+from urllib.parse import quote
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import logout as django_logout
@@ -12,24 +14,50 @@ from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, DecimalField, F, Sum
 from django.db.models.functions import Coalesce, TruncMonth
-from django.http import HttpResponse, HttpResponseForbidden
+from django.http import Http404, HttpResponse, HttpResponseForbidden
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
+
+from decouple import config
 
 from .models import (
     BudgetMensuel,
     CategorieBudget,
     Depense,
+    Devis,
+    PaiementDevis,
     ProfilUtilisateur,
     RepartitionCategorie,
     permission_de,
+    peut_creer_devis,
     telephone_de,
 )
-from .forms import ConnexionForm, DepenseForm, RepartitionForm
+from .forms import (
+    ConnexionForm,
+    DepenseForm,
+    DevisForm,
+    LigneDevisFormSetFactory,
+    PaiementDevisForm,
+    RepartitionForm,
+    formater_devis,
+)
+from .pdf import generer_devis
 from .telephone import formater_telephone, normaliser_telephone
 
 logger = logging.getLogger(__name__)
+
+
+def _slug(texte):
+    """Nom de fichier sûr, dérivé du nom d'un devis."""
+    garde = []
+    for caractere in str(texte).lower():
+        if caractere.isalnum():
+            garde.append(caractere)
+        elif garde and garde[-1] != '-':
+            garde.append('-')
+    return ''.join(garde).strip('-') or 'devis'
 
 # Type utilisé pour sommer prix_unitaire × quantite : la multiplication de
 # deux champs produit un Decimal dont Django ne devine pas la précision.
@@ -203,6 +231,18 @@ def permission_requise(droit):
 
         return enveloppe
     return decorateur
+
+
+def _contexte_commun(request, **extra):
+    """
+    Contexte de base commun aux pages.
+
+    `peut_devis` pilote l'affichage de l'onglet Devis dans la barre de
+    navigation : il est évalué une seule fois par requête.
+    """
+    commun = {'peut_devis': peut_creer_devis(request.user)}
+    commun.update(extra)
+    return commun
 
 
 def _budget_selectionne(request):
@@ -413,6 +453,7 @@ def depenses(request):
         'profils_categories': CategorieBudget.objects.filter(active=True).order_by('ordre', 'nom'),
         'is_staff': request.user.is_staff,
         'onglet': 'depenses',
+        'peut_devis': peut_creer_devis(request.user),
     }
     return render(request, 'budget_app/depenses.html', context)
 
@@ -500,6 +541,7 @@ def statistiques(request):
         'pics': {'poste': pic, 'auteur': pic_auteur, 'mois': pic_mois},
         'nombre_depenses': perimetre.count() if perimetre is not None else 0,
         'onglet': 'statistiques',
+        'peut_devis': peut_creer_devis(request.user),
     }
     return render(request, 'budget_app/statistiques.html', context)
 
@@ -573,6 +615,368 @@ def repartition(request, budget_id):
     })
 
 
+def devis_requis():
+    """
+    Autorise l'accès à l'interface des devis.
+
+    Le droit `peut_creer_devis` est une compétence distincte du droit
+    d'écriture sur les dépenses : quelqu'un qui prépare un prévision ne doit
+    pas pouvoir saisir de dépenses réelles par la même occasion.
+
+    En cas de refus, la redirection vise le tableau de bord et non la liste
+    des devis : celle-ci est protégée par le même contrôle, et y renvoyer
+    créerait une boucle de redirection infinie.
+    """
+    def decorateur(vue):
+        @wraps(vue)
+        def enveloppe(request, *args, **kwargs):
+            if not request.user.is_authenticated:
+                return redirect('budget_app:login')
+            if peut_creer_devis(request.user):
+                return vue(request, *args, **kwargs)
+            messages.error(
+                request,
+                "Votre compte ne dispose pas du droit de création de devis. "
+                "Contactez l'administrateur.",
+            )
+            return redirect('budget_app:dashboard')
+        return enveloppe
+    return decorateur
+
+
+def _devis_autorise(devis, utilisateur, *, modification=False):
+    """Renvoie le devis si l'utilisateur y a droit, sinon None."""
+    if modification:
+        return devis if devis.est_modifiable_par(utilisateur) else None
+    return devis if devis.est_visible_par(utilisateur) else None
+
+
+def _paiement_money():
+    """Coordonnées de paiement mobile money de l'administrateur (facultatif)."""
+    return {
+        'numero': config('MOBILE_MONEY_NUMERO', default=''),
+        'nom': config('MOBILE_MONEY_NOM', default=''),
+        'operateur': config('MOBILE_MONEY_OPERATEUR', default=''),
+    }
+
+
+@login_required
+@devis_requis()
+def devis_liste(request):
+    """
+    Historique des devis : ceux de l'utilisateur, plus ceux qu'on lui a
+    partagés. La liste est ordonnée du plus récent au plus ancien.
+    """
+    mes_devis = (
+        Devis.objects
+        .filter(auteur=request.user)
+        .prefetch_related('lignes', 'visible_par')
+    )
+    partages = (
+        Devis.objects
+        .filter(visible_par=request.user)
+        .exclude(auteur=request.user)
+        .select_related('auteur')
+        .prefetch_related('lignes')
+    )
+    # Un administrateur voit en plus tout ce qui existe.
+    if request.user.is_staff:
+        partages = (
+            Devis.objects
+            .exclude(auteur=request.user)
+            .select_related('auteur')
+            .prefetch_related('lignes')
+        )
+
+    contexte = {
+        'mes_devis': mes_devis,
+        'partages': partages,
+        'onglet': 'devis',
+        'peut_devis': True,
+        'total_mes_devis': sum((d.total for d in mes_devis), Decimal('0.00')),
+    }
+    return render(request, 'budget_app/devis_liste.html', contexte)
+
+
+@login_required
+@devis_requis()
+def devis_creer(request):
+    """Nouveau devis : le nom, puis les lignes saisies à la demande."""
+    if request.method == 'POST':
+        form = DevisForm(request.POST)
+        formset = LigneDevisFormSetFactory(request.POST)
+        if form.is_valid() and formset.is_valid():
+            with transaction.atomic():
+                devis = form.save(commit=False)
+                devis.auteur = request.user
+                devis.save()
+                formset.instance = devis
+                lignes = formset.save(commit=False)
+                for numero, ligne in enumerate(lignes):
+                    ligne.ordre = numero
+                    ligne.save()
+                formset.save_m2m()  # visible_par
+            messages.success(
+                request,
+                f"Devis « {devis.nom} » enregistré "
+                f"({devis.total:,.2f} Ar).".replace(',', ' '),
+            )
+            return redirect('budget_app:devis_detail', devis_id=devis.pk)
+    else:
+        form = DevisForm()
+        formset = LigneDevisFormSetFactory()
+
+    return render(request, 'budget_app/devis_form.html', {
+        'form': form,
+        'formset': formset,
+        'nouveau': True,
+        'onglet': 'devis',
+        'peut_devis': True,
+    })
+
+
+@login_required
+@devis_requis()
+def devis_modifier(request, devis_id):
+    """Modification d'un devis : l'auteur et les administrateurs seulement."""
+    devis = get_object_or_404(Devis, pk=devis_id)
+    if devis.est_modifiable_par(request.user):
+        messages.error(
+            request,
+            "Seul l'auteur de ce devis (ou un administrateur) peut le modifier.",
+        )
+        return redirect('budget_app:devis_detail', devis_id=devis.pk)
+
+    if request.method == 'POST':
+        form = DevisForm(request.POST, instance=devis)
+        formset = LigneDevisFormSetFactory(request.POST, instance=devis)
+        if form.is_valid() and formset.is_valid():
+            with transaction.atomic():
+                devis = form.save()
+                formset.instance = devis
+                lignes = formset.save(commit=False)
+                for numero, ligne in enumerate(lignes):
+                    ligne.save()
+                formset.save_m2m()
+            messages.success(
+                request,
+                f"Devis « {devis.nom} » mis à jour.".format(
+                    nom=devis.nom,
+                ),
+            )
+            return redirect('budget_app:devis_detail', devis_id=devis.pk)
+    else:
+        form = DevisForm(instance=devis)
+        formset = LigneDevisFormSetFactory(instance=devis)
+
+    return render(request, 'budget_app/devis_form.html', {
+        'form': form,
+        'formset': formset,
+        'devis': devis,
+        'nouveau': False,
+        'onglet': 'devis',
+        'peut_devis': True,
+    })
+
+
+@login_required
+@devis_requis()
+@require_POST
+def devis_supprimer(request, devis_id):
+    devis = get_object_or_404(Devis, pk=devis_id)
+    if not devis.est_modifiable_par(request.user):
+        return HttpResponseForbidden(
+            "Action interdite : seul l'auteur de ce devis peut le supprimer."
+        )
+    nom = devis.nom
+    devis.delete()
+    messages.success(request, f"Le devis « {nom} » a été supprimé.")
+    return redirect('budget_app:devis_liste')
+
+
+@login_required
+@permission_requise('peut_lire')
+def devis_detail(request, devis_id):
+    """Consultation d'un devis partagé, et actions sur ses lignes."""
+    devis = get_object_or_404(
+        Devis.objects.select_related('auteur').prefetch_related('lignes', 'visible_par'),
+        pk=devis_id,
+    )
+    if not devis.est_visible_par(request.user):
+        # 404 plutôt que 403 : ne pas révéler l'existence d'un devis
+        # simplement non partagé.
+        raise Http404("Ce devis n'existe pas ou n'est pas partagé avec vous.")
+
+    modifiable = devis.est_modifiable_par(request.user)
+    partageable = (
+        ProfilUtilisateur.objects
+        .select_related('utilisateur')
+        .order_by('utilisateur__username')
+    )
+
+    if request.method == 'POST' and modifiable:
+        return devis_action(request, devis)
+
+    return render(request, 'budget_app/devis_detail.html', {
+        'devis': devis,
+        'modifiable': modifiable,
+        'partageable': partageable,
+        # Identifiants des comptes déjà cochés : le gabarit ne peut pas
+        # tester l'appartenance à une relation, la vue prépare la liste.
+        'partages_ids': list(devis.visible_par.values_list('id', flat=True)),
+        'paiements': devis.paiements.select_related('declare_par', 'confirme_par'),
+        'paiement_form': PaiementDevisForm(devis=devis),
+        'onglet': 'devis',
+        'peut_devis': peut_creer_devis(request.user),
+    })
+
+
+def devis_action(request, devis):
+    """Actions ponctuelles depuis la fiche : partage ou suppression."""
+    action = request.POST.get('action')
+
+    if action == 'partager':
+        identifiants = request.POST.getlist('visible_par')
+        devis.visible_par.set(
+            User.objects.filter(pk__in=[i for i in identifiants if str(i).isdigit()])
+        )
+        partages = devis.visible_par.count()
+        messages.success(
+            request,
+            f"Partage mis à jour ({partages} personne"
+            f"{'s' if partages > 1 else ''}).".format(partages=partages),
+        )
+
+    elif action == 'supprimer':
+        nom = devis.nom
+        devis.delete()
+        messages.success(request, f"Le devis « {nom} » a été supprimé.")
+        return redirect('budget_app:devis_liste')
+
+    return redirect('budget_app:devis_detail', devis_id=devis.pk)
+
+
+@login_required
+@permission_requise('peut_lire')
+def devis_pdf(request, devis_id):
+    """Téléchargement du devis au format PDF."""
+    devis = get_object_or_404(Devis.objects.prefetch_related('lignes'), pk=devis_id)
+    if not devis.est_visible_par(request.user):
+        raise Http404("Ce devis n'existe pas ou n'est pas partagé avec vous.")
+
+    contenu = generer_devis(
+        devis,
+        contact={
+            'nom': f"{request.user.get_full_name() or request.user.username}",
+            'telephone': telephone_de(request.user),
+            'email': request.user.email,
+        },
+        mobile_money=_paiement_money(),
+    )
+    if contenu is None:
+        messages.error(
+            request,
+            "La génération de PDF n'est pas disponible sur ce serveur. "
+            "Utilisez l'export ou l'impression de la page.",
+        )
+        return redirect('budget_app:devis_detail', devis_id=devis.pk)
+
+    nom_fichier = f"devis-{_slug(devis.nom)}.pdf"
+    reponse = HttpResponse(contenu, content_type='application/pdf')
+    reponse['Content-Disposition'] = f'attachment; filename="{nom_fichier}"'
+    reponse['Content-Length'] = len(contenu)
+    return reponse
+
+
+@login_required
+@permission_requise('peut_lire')
+def devis_whatsapp(request, devis_id):
+    """
+    Ouvre WhatsApp avec le récapitulatif du devis.
+
+    WhatsApp n'accepte pas d'envoyer un fichier depuis un simple lien web :
+    cela demanderait un compte WhatsApp Business et un jeton d'API. On
+    transmet donc le texte, et le PDF reste à télécharger puis à joindre
+    manuellement — c'est la limite du canal, pas un oubli.
+    """
+    devis = get_object_or_404(Devis.objects.prefetch_related('lignes'), pk=devis_id)
+    if not devis.est_visible_par(request.user):
+        raise Http404("Ce devis n'existe pas ou n'est pas partagé avec vous.")
+
+    destinataire = (config('WHATSAPP_ADMIN', default='261384160133')
+                    .strip().replace(' ', ''))
+    lignes = '\n'.join(
+        f"- {ligne.objet} : {ligne.quantite} x "
+        f"{formater_devis(ligne.prix_unitaire)} Ar = {formater_devis(ligne.total)} Ar"
+        for ligne in devis.lignes.all()
+    )
+    reste = devis.reste_a_payer()
+    texte = (
+        f"DEVIS — {devis.nom}\n"
+        f"Date : {devis.date.strftime('%d/%m/%Y')}\n"
+        f"Établi par : {devis.auteur.username}\n"
+        f"--------------------------------\n"
+        f"{lignes}\n"
+        f"--------------------------------\n"
+        f"TOTAL : {formater_devis(devis.total)} Ar\n"
+        + (f"Déjà réglé : {formater_devis(devis.total - reste)} Ar\n"
+           if devis.total != reste else '')
+        + f"Reste à régler : {formater_devis(reste)} Ar\n"
+        + (f"\nMerci de joindre le PDF du devis.\n"
+           f"Consultation en ligne : {request.build_absolute_uri(reverse('budget_app:devis_detail', args=[devis.pk]))}"
+           if reste else "")
+    )
+
+    return redirect(f"https://wa.me/{destinataire}?text={quote(texte)}")
+
+
+@login_required
+@permission_requise('peut_lire')
+@require_POST
+def devis_paiement_declarer(request, devis_id):
+    """Un utilisateur déclare avoir envoyé un montant par mobile money."""
+    devis = get_object_or_404(Devis, pk=devis_id)
+    if not devis.est_visible_par(request.user):
+        raise Http404("Ce devis n'existe pas ou n'est pas partagé avec vous.")
+
+    form = PaiementDevisForm(request.POST, devis=devis)
+    if form.is_valid():
+        paiement = form.save(commit=False)
+        paiement.devis = devis
+        paiement.declare_par = request.user
+        paiement.save()
+        messages.success(
+            request,
+            "Paiement déclaré. L'administrateur doit le vérifier avant qu'il "
+            "ne soit pris en compte.",
+        )
+    else:
+        messages.error(request, "Déclaration incomplète : vérifiez les montants.")
+    return redirect('budget_app:devis_detail', devis_id=devis.pk)
+
+
+@login_required
+@require_POST
+def devis_paiement_valider(request, devis_id, paiement_id):
+    """L'administrateur valide (ou annule) une déclaration de paiement."""
+    if not request.user.is_staff:
+        return HttpResponseForbidden(
+            "Action réservée aux administrateurs."
+        )
+    devis = get_object_or_404(Devis, pk=devis_id)
+    paiement = get_object_or_404(PaiementDevis, pk=paiement_id, devis=devis)
+
+    paiement.confirme = not paiement.confirme
+    paiement.confirme_par = request.user if paiement.confirme else None
+    paiement.save(update_fields=['confirme', 'confirme_par'])
+
+    messages.success(
+        request,
+        "Paiement validé." if paiement.confirme else "Validation annulée.",
+    )
+    return redirect('budget_app:devis_detail', devis_id=devis.pk)
+
+
 @login_required
 @permission_requise('peut_lire')
 def utilisateurs(request):
@@ -591,6 +995,7 @@ def utilisateurs(request):
         'profils': profils,
         'onglet': 'utilisateurs',
         'is_staff': request.user.is_staff,
+        'peut_devis': peut_creer_devis(request.user),
     }
 
     if request.method == 'POST' and request.user.is_staff:

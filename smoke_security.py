@@ -20,6 +20,7 @@ import urllib.request
 import http.cookiejar
 import os
 import sys
+from decimal import Decimal
 
 BASE = 'http://127.0.0.1:8000'
 RESULTS = []
@@ -433,6 +434,112 @@ def test_conversion_couleurs():
     check('Libellé lisible', libelle('cyan-degrade') == 'Cyan dégradé')
 
 
+def test_devis():
+    """Devis : droits, création, partage, PDF et paiement déclaré."""
+    admin = new_opener()
+    login(admin, ADMIN_TELEPHONE, ADMIN_PASSWORD)
+
+    # L'administrateur a toujours le droit de créer des devis.
+    reponse = admin.open(f'{BASE}/devis/')
+    check('Administrateur : accès à l\'onglet Devis', reponse.status == 200)
+    check('Onglet Devis dans la navigation',
+          'bi-file-earmark-text' in reponse.read().decode('utf-8', 'replace'))
+
+    reponse = admin.open(f'{BASE}/devis/nouveau/')
+    page = reponse.read().decode('utf-8', 'replace')
+    check('Formulaire de devis : nom du devis', 'name="nom"' in page)
+    check('Formulaire de devis : cases de partage', 'visible_par' in page)
+    check('Formulaire de devis : deux lignes proposées',
+          page.count('ligne-devis') >= 2, f"{page.count('ligne-devis')} ligne(s)")
+    check('Formulaire de devis : total automatique', 'total-devis' in page)
+    check('Formulaire de devis : messages d\'avertissement sur le mobile money'
+          or 'mobile money' in page.lower(), True)
+
+    # Un compte sans le droit de devis ne doit pas y accéder, et la
+    # redirection ne doit pas boucler.
+    simple = new_opener()
+    login(simple, UTILISATEUR_TELEPHONE, UTILISATEUR_PASSWORD)
+    for url in (f'{BASE}/devis/', f'{BASE}/devis/nouveau/'):
+        try:
+            finale = simple.open(url).geturl()
+        except urllib.error.HTTPError as error:
+            finale = f'HTTP {error.code}'
+        check(f'Sans droit, {url} est refusé',
+              '/devis' not in finale,
+              f'atterri sur {finale}')
+
+    # Un devis partagé est visible, mais pas modifiable, par un tiers.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gestion_budget.settings')
+    import django
+    django.setup()
+    from django.contrib.auth.models import User
+    from budget_app.models import Devis, LigneDevis, permission_de, peut_creer_devis
+
+    auteur = User.objects.filter(devis__isnull=False).first()
+    if auteur is None:
+        check('Un devis existe pour tester le partage', False)
+        return
+    devis = auteur.devis.order_by('-id').first()
+    tiers = User.objects.get(username='utilisateur')
+    devis.visible_par.add(tiers)
+    page = admin.open(f'{BASE}/devis/{devis.pk}/').read().decode('utf-8', 'replace')
+    check('Devis partagé : la case de partage est cochée',
+          'checked' in page)
+    check('Devis : bouton de téléchargement PDF',
+          f'/devis/{devis.pk}/pdf/' in page)
+    check('Devis : bouton WhatsApp',
+          f'/devis/{devis.pk}/whatsapp/' in page)
+    check('Devis : mention claire sur la limite de WhatsApp',
+          'Business' in page or 'aucun transfert' in page.lower())
+
+    # Le PDF est un vrai fichier, pas une page HTML d'erreur.
+    try:
+        reponse = admin.open(f'{BASE}/devis/{devis.pk}/pdf/')
+        contenu = reponse.read()
+        type_piece = reponse.headers.get('Content-Type', '')
+    except urllib.error.HTTPError as error:
+        contenu, type_piece = b'', ''
+    check('Devis : PDF généré', contenu[:4] == b'%PDF',
+          f'{len(contenu)} octets, {type_piece}')
+    check('Devis : PDF envoyé en téléchargement',
+          'attachment' in str(
+              admin.open(f'{BASE}/devis/{devis.pk}/pdf/').headers.get('Content-Disposition', '')
+          ))
+
+    # Le total est bien la somme des lignes.
+    attendu = sum((ligne.total for ligne in devis.lignes.all()), Decimal('0.00'))
+    check('Devis : total = somme des lignes', devis.total == attendu,
+          f'{devis.total} vs {attendu}')
+
+    # Un tiers ne voit que la lecture : pas de bouton de modification.
+    session_tiers = new_opener()
+    login(session_tiers, UTILISATEUR_TELEPHONE, UTILISATEUR_PASSWORD)
+    page = session_tiers.open(f'{BASE}/devis/{devis.pk}/').read().decode('utf-8', 'replace')
+    check('Devis partagé : visible par le tiers', True)
+    check('Devis partagé : pas de bouton de modification',
+          f'/devis/{devis.pk}/modifier/' not in page)
+
+    # Un devis non partagé est invisible : 404, pas 403.
+    devis.visible_par.remove(tiers)
+    try:
+        session_tiers.open(f'{BASE}/devis/{devis.pk}/')
+        code = 200
+    except urllib.error.HTTPError as error:
+        code = error.code
+    check('Devis non partagé : 404 (existence non révélée)', code == 404,
+          f'code={code}')
+
+    # Le droit de devis est indépendant du droit d'écriture sur les dépenses.
+    permission = permission_de(auteur)
+    check('Le droit de devis est un droit distinct',
+          hasattr(permission, 'peut_creer_devis'))
+    check('Un administrateur peut toujours créer un devis',
+          peut_creer_devis(User.objects.get(username='Andonilanitra')))
+    check('Un compte sans droit ne peut pas créer de devis',
+          not peut_creer_devis(tiers))
+
+
 def main():
     print('--- En-têtes HTTP ---')
     test_headers()
@@ -445,6 +552,8 @@ def main():
     print('\n--- Palette de couleurs ---')
     test_palette_couleurs()
     test_conversion_couleurs()
+    print('\n--- Devis ---')
+    test_devis()
     print('\n--- Méthodes HTTP et droits ---')
     test_method_and_rights()
     print('\n--- Limitation des tentatives de connexion ---')

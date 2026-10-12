@@ -1,0 +1,156 @@
+{% extends 'budget_app/base.html' %}
+{% load l10n %}
+
+{% block title %}Devis - Kendevis{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 fade-up">
+    <div>
+        <h1 class="h4 fw-bold mb-1">
+            <i class="bi bi-file-earmark-text me-2 text-primary"></i>Devis
+        </h1>
+        <p class="text-muted small mb-0">
+            Préparer un prévision pour le mois suivant, sans toucher au budget réel.
+        </p>
+    </div>
+    <a class="btn btn-primary" href="{% url 'budget_app:devis_creer' %}">
+        <i class="bi bi-plus-lg me-1"></i>Nouveau devis
+    </a>
+</div>
+
+<div class="alert alert-info small shadow-sm">
+    <i class="bi bi-lightbulb me-2"></i>
+    Un devis est une <strong>estimation</strong> : il ne touche pas au budget ni aux
+    dépenses réelles. Faites-le, envoyez-le, puis saisissez les dépenses
+    réellement payées dans le tableau de bord.
+</div>
+
+<!-- Mes devis -->
+<h2 class="h6 fw-bold mb-3">
+    <i class="bi bi-person me-2"></i>Mes devis
+    {% if mes_devis %}
+        <span class="text-muted fw-normal">
+            — total {{ total_mes_devis|floatformat:2|unlocalize }} Ar
+        </span>
+    {% endif %}
+</h2>
+
+{% if mes_devis %}
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">Devis</th>
+                        <th scope="col">Date</th>
+                        <th scope="col" class="text-center">Lignes</th>
+                        <th scope="col" class="text-end">Total</th>
+                        <th scope="col">Partagé avec</th>
+                        <th scope="col" class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for devis in mes_devis %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'budget_app:devis_detail' devis.pk %}"
+                                   class="fw-semibold text-decoration-none">
+                                    {{ devis.nom }}
+                                </a>
+                                {% if devis.reste_a_payer %}
+                                    <span class="badge bg-warning text-dark ms-1">reste à régler</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-nowrap text-muted small">{{ devis.date|date:"d/m/Y" }}</td>
+                            <td class="text-center">{{ devis.nombre_lignes }}</td>
+                            <td class="text-end text-nowrap fw-bold">
+                                {{ devis.total|floatformat:2|unlocalize }} Ar
+                            </td>
+                            <td class="small">
+                                {% if devis.visible_par.all %}
+                                    {% for partage in devis.visible_par.all %}
+                                        <span class="badge bg-secondary-subtle text-secondary me-1">
+                                            {{ partage.username }}
+                                        </span>
+                                    {% endfor %}
+                                {% else %}
+                                    <span class="text-muted">Personne</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end text-nowrap">
+                                <a class="btn btn-sm btn-outline-primary"
+                                   href="{% url 'budget_app:devis_pdf' devis.pk %}"
+                                   title="Télécharger le PDF">
+                                    <i class="bi bi-file-earmark-pdf"></i>
+                                </a>
+                                <a class="btn btn-sm btn-outline-secondary"
+                                   href="{% url 'budget_app:devis_modifier' devis.pk %}"
+                                   title="Modifier">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <a class="btn btn-sm btn-outline-primary"
+                                   href="{% url 'budget_app:devis_detail' devis.pk %}"
+                                   title="Ouvrir">
+                                    <i class="bi bi-arrow-right"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% else %}
+    <div class="alert alert-secondary shadow-sm">
+        <i class="bi bi-inbox me-2"></i>
+        Vous n'avez pas encore créé de devis.
+        <a href="{% url 'budget_app:devis_creer' %}" class="alert-link ms-1">Créer le premier</a>
+    </div>
+{% endif %}
+
+<!-- Devis partagés -->
+{% if partages %}
+    <h2 class="h6 fw-bold mb-3 mt-4">
+        <i class="bi bi-share me-2"></i>Devis partagés avec moi
+    </h2>
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">Devis</th>
+                        <th scope="col">Auteur</th>
+                        <th scope="col">Date</th>
+                        <th scope="col" class="text-end">Total</th>
+                        <th scope="col" class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for devis in partages %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'budget_app:devis_detail' devis.pk %}"
+                                   class="fw-semibold text-decoration-none">
+                                    {{ devis.nom }}
+                                </a>
+                            </td>
+                            <td class="text-muted small">{{ devis.auteur.username }}</td>
+                            <td class="text-nowrap text-muted small">{{ devis.date|date:"d/m/Y" }}</td>
+                            <td class="text-end text-nowrap fw-bold">
+                                {{ devis.total|floatformat:2|unlocalize }} Ar
+                            </td>
+                            <td class="text-end text-nowrap">
+                                <a class="btn btn-sm btn-outline-primary"
+                                   href="{% url 'budget_app:devis_pdf' devis.pk %}"
+                                   title="Télécharger le PDF">
+                                    <i class="bi bi-file-earmark-pdf"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

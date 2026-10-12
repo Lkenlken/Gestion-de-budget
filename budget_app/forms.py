@@ -2,6 +2,8 @@ from django import forms
 from django.contrib.auth import authenticate
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.models import User
+from django.forms import BaseInlineFormSet, inlineformset_factory
+from django.forms.formsets import DELETION_FIELD_NAME
 from decimal import Decimal
 
 from .couleurs import (
@@ -17,6 +19,9 @@ from .models import (
     BudgetMensuel,
     CategorieBudget,
     Depense,
+    Devis,
+    LigneDevis,
+    PaiementDevis,
     ProfilUtilisateur,
 )
 from .telephone import normaliser_telephone
@@ -148,6 +153,250 @@ class ConnexionForm(AuthenticationForm):
             self.confirm_login_allowed(self.user_cache)
 
         return self.cleaned_data
+
+
+class PartageField(forms.ModelMultipleChoiceField):
+    """
+    Liste d'utilisateurs pouvant voir un devis, tolérante à la valeur vide.
+
+    Django rejette la chaîne vide sur un champ à choix multiples
+    (« n'est pas une valeur correcte »). Or « personne de coché » est un cas
+    normal : ne cocher aucune case ne doit pas empêcher d'enregistrer un
+    devis.
+
+    Le tri se fait dans `prepare_value` et non dans `to_python` :
+    `ModelMultipleChoiceField` redéfinit `clean()` et n'appelle pas la
+    conversion de la classe mère — un correctif placé plus haut serait
+    silencieusement ignoré.
+    """
+
+    def prepare_value(self, valeur):
+        if hasattr(valeur, '__iter__') and not isinstance(valeur, str):
+            valeur = [v for v in valeur if str(v).strip()]
+        return super().prepare_value(valeur)
+
+
+class DevisForm(forms.ModelForm):
+    """
+    En-tête d'un devis : nom, date, observations et partage.
+
+    Le champ `visible_par` est une liste de cases à cocher : c'est
+    l'utilisateur qui décide, après enregistrement, qui peut consulter son
+    devis. Seuls les comptes disposant d'un numéro de téléphone sont
+    proposés, donc réellement susceptibles de se connecter.
+    """
+
+    class Meta:
+        model = Devis
+        fields = ['nom', 'date', 'notes', 'visible_par']
+        widgets = {
+            'nom': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ex : Budget Novembre 2026',
+            }),
+            'date': forms.DateInput(attrs={
+                'class': 'form-control',
+                'type': 'date',
+            }),
+            'notes': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Observations imprimées sur le PDF (facultatif)',
+            }),
+            'visible_par': forms.CheckboxSelectMultiple(attrs={
+                'class': 'liste-partage',
+            }),
+        }
+        labels = {
+            'nom': 'Nom du devis',
+            'date': 'Date',
+            'notes': 'Observations',
+            'visible_par': 'Visible par',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['visible_par'] = PartageField(
+            queryset=(
+                User.objects.filter(is_active=True)
+                .exclude(profil__isnull=True)
+                .order_by('username')
+            ),
+            required=False,
+            widget=forms.CheckboxSelectMultiple(attrs={'class': 'liste-partage'}),
+            label='Visible par',
+            help_text=(
+                "Cochez les utilisateurs qui pourront consulter ce devis après "
+                "enregistrement. Vous gardez toujours l'accès."
+            ),
+        )
+        self.fields['notes'].required = False
+
+
+class LigneDevisForm(forms.ModelForm):
+    """
+    Une ligne : un objet, une quantité, un prix unitaire.
+
+    Aucun champ n'est obligatoire individuellement : une ligne laissée vide
+    doit pouvoir être ignorée sans erreur. C'est `LigneDevisFormSet.clean()`
+    qui vérifie la cohérence de l'ensemble — au moins une ligne complète, et
+    aucune ligne à moitié remplie. Le message d'erreur est ainsi en français
+    et décrit la ligne fautive.
+    """
+
+    class Meta:
+        model = LigneDevis
+        fields = ['objet', 'quantite', 'prix_unitaire']
+        widgets = {
+            'objet': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ex : Riz (sac de 10 kg)',
+            }),
+            'quantite': forms.NumberInput(attrs={
+                'class': 'form-control quantite-ligne',
+                'step': '0.01',
+                'min': '0',
+            }),
+            'prix_unitaire': forms.NumberInput(attrs={
+                'class': 'form-control prix-ligne',
+                'step': '0.01',
+                'min': '0',
+                'placeholder': '0.00',
+            }),
+        }
+        labels = {
+            'objet': 'Objet',
+            'quantite': 'Quantité',
+            'prix_unitaire': 'Prix unitaire (Ar)',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for champ in self.fields.values():
+            champ.required = False
+
+
+class PaiementDevisForm(forms.ModelForm):
+    """Déclaration d'un paiement par mobile money."""
+
+    class Meta:
+        model = PaiementDevis
+        fields = ['montant', 'moyen', 'numero', 'note']
+        widgets = {
+            'montant': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '0',
+                'placeholder': '0.00',
+            }),
+            'moyen': forms.Select(attrs={'class': 'form-select'}),
+            'numero': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ex : 034 00 000 00',
+            }),
+            'note': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 2,
+                'placeholder': 'Référence de la transaction',
+            }),
+        }
+        labels = {
+            'montant': 'Montant envoyé (Ar)',
+            'moyen': 'Opérateur',
+            'numero': 'Numéro utilisé',
+            'note': 'Référence / remarque',
+        }
+
+    def __init__(self, *args, devis=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.devis = devis
+        if devis is not None:
+            self.fields['montant'].widget.attrs['placeholder'] = formater_devis(devis.total)
+
+    def clean(self):
+        donnees = super().clean()
+        if self.devis is not None and donnees.get('montant'):
+            reste = self.devis.reste_a_payer()
+            if donnees['montant'] > reste:
+                self.add_error(
+                    'montant',
+                    f"Le montant dépasse le reste à régler ({reste:,.2f} Ar).".replace(',', ' '),
+                )
+        return donnees
+
+
+def formater_devis(montant):
+    """`1234.5` -> `1 234,50` (format français sans le suffixe Ar)."""
+    quantite = Decimal(str(montant or 0)).quantize(Decimal('0.01'))
+    entier, _, decimales = f"{quantite:f}".partition('.')
+    groupes = []
+    while len(entier) > 3:
+        groupes.insert(0, entier[-3:])
+        entier = entier[:-3]
+    groupes.insert(0, entier)
+    return f"{' '.join(groupes)},{decimales}"
+
+
+class LigneDevisFormSet(BaseInlineFormSet):
+    """
+    Ensemble des lignes d'un devis.
+
+    Django ne valide que les lignes existantes, pas les lignes vides
+    ajoutées dynamiquement par le JavaScript. La cohérence est donc vérifiée
+    ici, une fois l'ensemble connu, pour pouvoir dire précisément ce qui
+    manque et sur quelle ligne.
+    """
+
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+
+        completes = 0
+        incompletes = []
+
+        for numero, form in enumerate(self.forms, start=1):
+            objet = (form.cleaned_data.get('objet') or '').strip()
+            quantite = form.cleaned_data.get('quantite')
+            prix = form.cleaned_data.get('prix_unitaire')
+
+            if not objet and quantite in (None, '') and prix in (None, ''):
+                # Ligne laissée vide : on ne la signale pas comme une erreur,
+                # on la marque pour suppression. Sans cela elle serait quand
+                # même enregistrée : la quantité par défaut du modèle (1.00)
+                # diffère de la valeur vide renvoyée, donc Django la
+                # considère comme modifiée et tente de l'enregistrer avec
+                # une quantité NULL.
+                form.cleaned_data[DELETION_FIELD_NAME] = True
+                continue
+
+            if not objet:
+                incompletes.append(f"ligne {numero} : indiquez l'objet")
+            elif quantite in (None, ''):
+                incompletes.append(f"ligne {numero} (« {objet} ») : indiquez la quantité")
+            elif prix in (None, ''):
+                incompletes.append(f"ligne {numero} (« {objet} ») : indiquez le prix unitaire")
+            else:
+                completes += 1
+
+        if incompletes:
+            raise forms.ValidationError(incompletes)
+        if completes == 0:
+            raise forms.ValidationError(
+                "Ajoutez au moins une ligne : un objet, une quantité et un prix unitaire."
+            )
+
+
+# Deux lignes vierges sont proposées au départ ; l'utilisateur en ajoute
+# autant que nécessaire via le bouton « Ajouter une ligne ».
+LigneDevisFormSetFactory = inlineformset_factory(
+    Devis,
+    LigneDevis,
+    form=LigneDevisForm,
+    formset=LigneDevisFormSet,
+    extra=2,
+    can_delete=True,
+)
 
 
 class ProfilUtilisateurForm(forms.ModelForm):

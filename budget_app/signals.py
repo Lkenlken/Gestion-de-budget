@@ -21,5 +21,6 @@ def creer_permission_utilisateur(sender, instance, created, **kwargs):
             defaults={
                 'peut_lire': True,
                 'peut_ecrire': instance.is_staff,
+                'peut_creer_devis': instance.is_staff,
             },
         )

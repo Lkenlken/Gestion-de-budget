@@ -453,6 +453,168 @@ def creer_profil(utilisateur, telephone, fonction=''):
     return profil, created
 
 
+class Devis(models.Model):
+    """
+    Devis : un prévisionnel de dépenses.
+
+    Sert à estimer un budget — celui du mois suivant, par exemple — sans
+    obliged de saisir de fausses dépenses dans le budget réel. Chaque devis a
+    son nom, ses lignes et son total calculé automatiquement.
+
+    Le partage est explicite : après enregistrement, l'auteur coche les
+    utilisateurs qui pourront consulter le devis. L'auteur et les
+    administrateurs y ont toujours accès.
+    """
+
+    nom = models.CharField(
+        max_length=120, verbose_name="Nom du devis",
+        help_text="Ex : Budget Novembre 2026",
+    )
+    auteur = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='devis', verbose_name="Auteur",
+    )
+    date = models.DateField(default=timezone.now, verbose_name="Date du devis")
+    notes = models.TextField(
+        blank=True, verbose_name="Observations",
+        help_text="Commentaire printed sur le PDF.",
+    )
+    visible_par = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name='devis_partages',
+        verbose_name="Visible par",
+        help_text="Utilisateurs autorisés à consulter ce devis.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Créé le")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Modifié le")
+
+    class Meta:
+        verbose_name = "Devis"
+        verbose_name_plural = "Devis"
+        ordering = ['-date', '-created_at']
+
+    def __str__(self):
+        return f"{self.nom} — {self.total:,.2f} Ar".replace(',', ' ')
+
+    @property
+    def total(self):
+        """Somme des lignes. Recalculée à chaque appel : le PDF comme
+        l'interface doivent refléter l'état réel des lignes."""
+        return sum((ligne.total for ligne in self.lignes.all()), Decimal('0.00'))
+
+    @property
+    def nombre_lignes(self):
+        return self.lignes.count()
+
+    def est_modifiable_par(self, utilisateur):
+        """L'auteur et les administrateurs peuvent modifier le devis."""
+        return (utilisateur.is_authenticated
+                and (utilisateur.pk == self.auteur_id or utilisateur.is_staff))
+
+    def est_visible_par(self, utilisateur):
+        """Auteur, administrateur, ou utilisateur explicitement coché."""
+        if not utilisateur.is_authenticated:
+            return False
+        if utilisateur.pk == self.auteur_id or utilisateur.is_staff:
+            return True
+        return self.visible_par.filter(pk=utilisateur.pk).exists()
+
+    def paiements_valides(self):
+        """Montants déclarés par les utilisateurs et validés par l'admin."""
+        return sum(
+            (paiement.montant for paiement in self.paiements.filter(confirme=True)),
+            Decimal('0.00'),
+        )
+
+    def reste_a_payer(self):
+        return self.total - self.paiements_valides()
+
+
+class LigneDevis(models.Model):
+    """Une ligne de devis : un objet, une quantité, un prix unitaire."""
+
+    devis = models.ForeignKey(
+        Devis, on_delete=models.CASCADE,
+        related_name='lignes', verbose_name="Devis",
+    )
+    objet = models.CharField(
+        max_length=200, verbose_name="Objet",
+        help_text="Ex : Riz, Huile, Savon...",
+    )
+    quantite = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal('1.00'),
+        verbose_name="Quantité",
+    )
+    prix_unitaire = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal('0.00'),
+        verbose_name="Prix unitaire (Ar)",
+    )
+    ordre = models.PositiveSmallIntegerField(default=0, verbose_name="Ordre")
+
+    class Meta:
+        verbose_name = "Ligne de devis"
+        verbose_name_plural = "Lignes de devis"
+        ordering = ['ordre', 'id']
+
+    def __str__(self):
+        return f"{self.objet} — {self.total:,.2f} Ar".replace(',', ' ')
+
+    @property
+    def total(self):
+        return (self.quantite or Decimal('0')) * (self.prix_unitaire or Decimal('0'))
+
+
+class PaiementDevis(models.Model):
+    """
+    Déclaration d'un paiement par mobile money.
+
+    L'application **n'effectue aucun transfert** :Mvola, Airtel Money et les
+    autres opérateurs n'autorisent un virement depuis une application qu'avec
+    un contrat marchand, que seul l'administrateur peut signer. Ce que permet
+    ce modèle, c'est la traçabilité : un utilisateur déclare avoir envoyé un
+    montant, l'administrateur le vérifie et le valide.
+    """
+
+    MOYENS = [
+        ('mvola', 'MVola (Orange)'),
+        ('airtel', 'Airtel Money'),
+        ('moov', 'Moov Money'),
+        ('autre', 'Autre moyen'),
+    ]
+
+    devis = models.ForeignKey(
+        Devis, on_delete=models.CASCADE,
+        related_name='paiements', verbose_name="Devis",
+    )
+    declare_par = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='paiements_devis', verbose_name="Déclaré par",
+    )
+    montant = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Montant (Ar)")
+    moyen = models.CharField(max_length=20, choices=MOYENS, default='mvola', verbose_name="Moyen")
+    numero = models.CharField(
+        max_length=30, blank=True, verbose_name="Numéro utilisé",
+        help_text="Numéro depuis lequel le transfert a été envoyé.",
+    )
+    note = models.TextField(blank=True, verbose_name="Référence / remarque")
+    confirme = models.BooleanField(default=False, verbose_name="Validé par l'administrateur")
+    confirme_par = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='paiements_valides', verbose_name="Validé par",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Déclaré le")
+
+    class Meta:
+        verbose_name = "Paiement de devis"
+        verbose_name_plural = "Paiements de devis"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        etat = "validé" if self.confirme else "en attente"
+        return f"{self.montant:,.2f} Ar — {self.get_moyen_display()} ({etat})".replace(',', ' ')
+
+
 class PermissionUtilisateur(models.Model):
     """
     Autorisations d'accès d'un utilisateur de l'application.
@@ -481,6 +643,11 @@ class PermissionUtilisateur(models.Model):
         default=False,
         verbose_name="Écriture",
         help_text="Peut ajouter de nouvelles dépenses (aucune modification possible).",
+    )
+    peut_creer_devis = models.BooleanField(
+        default=False,
+        verbose_name="Devis",
+        help_text="Peut créer, modifier et partager ses propres devis.",
     )
     modifie_par = models.ForeignKey(
         User,
@@ -537,6 +704,26 @@ def permission_de(utilisateur):
         defaults={
             'peut_lire': True,
             'peut_ecrire': utilisateur.is_staff,
+            # La création d'un devis est une compétence à part : elle est
+            # accordée explicitement, jamais déduite du droit d'écriture.
+            # Un utilisateur qui calcule un prévision ne doit pas pouvoir
+            # saisir des dépenses réelles par la même occasion.
+            'peut_creer_devis': utilisateur.is_staff,
         },
     )
     return permission
+
+
+def peut_creer_devis(utilisateur):
+    """
+    Retourne True si l'utilisateur a le droit de créer des devis.
+
+    Les administrateurs ont toujours ce droit, même si leur ligne
+    d'autorisation n'a pas été mise à jour.
+    """
+    if not utilisateur or not utilisateur.is_authenticated:
+        return False
+    if utilisateur.is_staff:
+        return True
+    permission = permission_de(utilisateur)
+    return bool(permission and permission.peut_creer_devis)

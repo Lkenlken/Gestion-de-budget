@@ -39,6 +39,28 @@ nom d'utilisateur. Les trois écritures suivantes désignent le même compte :
 Les numéros sont stockés au format international (`+261384160133`) quel que
 soit le format saisi : impossible d'avoir deux comptes pour le même numéro.
 
+### Créer un devis
+
+Onglet **Devis** → *Nouveau devis*.
+
+Le droit de création de devis est **distinct** du droit d'écriture sur les
+dépenses : un utilisateur peut préparer un prévision sans pouvoir saisir de
+dépense réelle. Activez-le depuis l'administration, dans
+*Autorisations d'accès* → colonne **Devis**.
+
+Après enregistrement, la fiche du devis permet de :
+
+- cocher les utilisateurs qui pourront le consulter (l'auteur et les
+  administrateurs y ont toujours accès) ;
+- télécharger le **PDF** (en-tête, lignes, total, reste à régler) ;
+- ouvrir **WhatsApp** avec le récapitulatif texte ;
+- déclarer un **paiement** par mobile money, que l'administrateur valide.
+
+> ⚠️ **Limites assumées.** WhatsApp n'accepte pas d'envoyer un fichier depuis
+> un lien web : le PDF se télécharge puis se joint manuellement au message.
+> Et aucun virement mobile money n'est déclenché par l'application, faute de
+> contrat marchand. Ce qui est mis en place, c'est la traçabilité.
+
 **Créer un administrateur** (le mot de passe est saisi en caché) :
 
 ```bash
@@ -54,7 +76,6 @@ au lieu d'en créer un second.
 
 **Rattacher des dépenses existantes à une catégorie** (après la mise en place
 des postes, sur un budget saisi auparavant) :
-
 ```bash
 # Voir l'état actuel, sans rien modifier
 python manage.py categoriser_depenses --statistiques
@@ -115,8 +136,17 @@ l'enregistrement est refusé et le montant manquant est indiqué.
 - **Historique par poste** : l'onglet Dépenses propose une vue « liste unique »
   ou une vue « par catégorie » qui sépare complètement chaque poste avec son
   sous-total, plus un filtre rapide sur un poste donné.
+- **Devis** : un prévisionnel indépendant du budget. Lignes
+  (objet / quantité / prix unitaire), total calculé ligne par ligne, ajout
+  et retrait de lignes, nom propre à chaque devis, historique personnel,
+  partage par cases à cocher, export PDF et envoi du récapitulatif sur
+  WhatsApp.
+- **Paiement d'un devis par mobile money** : l'application **n'effectue aucun
+  transfert** — MVola et Airtel n'autorisent un virement depuis une application
+  qu'avec un contrat marchand. Elle affiche où payer (numéro, opérateur),
+  trace les déclarations de paiement et laisse l'administrateur les valider.
 - **Navigation par onglets** : Tableau de bord, Dépenses, Statistiques,
-  Utilisateurs, Administration.
+  Utilisateurs, Devis, Administration.
 - **Sous-budgets par catégorie** : l'administrateur répartit le budget initial
   en postes (courses, provisions, transport…) ; chaque dépense est rattachée à
   un poste, ce qui affiche « Courses : 50 000 / 100 000 Ar » et le solde
@@ -244,15 +274,16 @@ gestion_budget/
 ├── budget_app/
 │   ├── models.py            # BudgetMensuel, Depense, CategorieBudget, RepartitionCategorie…
 │   ├── views.py             # dashboard, suppression, ThrottledLoginView
-│   ├── forms.py             # ConnexionForm (téléphone), DepenseForm, RepartitionForm
+│   ├── forms.py             # ConnexionForm, DevisForm, LigneDevisFormSet, RepartitionForm
 │   ├── backends.py          # TelephoneBackend (connexion par téléphone)
 │   ├── telephone.py         # Normalisation des numéros
 │   ├── couleurs.py          # Palette nommée des catégories (couleurs + dégradés)
+│   ├── pdf.py               # Génération du PDF d'un devis (ReportLab)
 │   ├── pwa.py               # Manifeste et service worker
 │   ├── middleware.py        # En-têtes de sécurité (CSP, etc.)
-│   ├── management/commands/ # creer_admin, changer_mot_de_passe, categoriser_depenses
-│   ├── templatetags/        # math_extras (div, mul, abs, ar)
-│   ├── templates/           # base, dashboard, depenses, statistiques, repartition, utilisateurs, login
+│   ├── management/commands/ # creer_admin, changer_mot_de_passe, categoriser_depenses│   ├── templatetags/        # math_extras (div, mul, abs, ar)
+│   ├── templates/           # base, dashboard, depenses, statistiques, repartition,
+│   │                        #   utilisateurs, devis_liste, devis_form, devis_detail, login
 │   └── static/budget_app/   # style.css, pwa_onglets.css, ui.js, pwa.js, sw.js, icons/
 ├── deploy/                  # install.sh, update.sh (serveur Linux)
 ├── .env.example             # Modèle de configuration

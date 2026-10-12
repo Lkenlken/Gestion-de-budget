@@ -7,6 +7,9 @@ from .models import (
     BudgetMensuel,
     CategorieBudget,
     Depense,
+    Devis,
+    LigneDevis,
+    PaiementDevis,
     PermissionUtilisateur,
     ProfilUtilisateur,
     RepartitionCategorie,
@@ -138,6 +141,62 @@ class ProfilUtilisateurAdmin(admin.ModelAdmin):
         return obj.telephone_affiche
 
 
+class LigneDevisInline(admin.TabularInline):
+    """Les lignes d'un devis, éditables depuis sa fiche."""
+
+    model = LigneDevis
+    extra = 1
+    fields = ['objet', 'quantite', 'prix_unitaire', 'total_display']
+    readonly_fields = ['total_display']
+
+    @admin.display(description='Somme')
+    def total_display(self, obj):
+        if not obj.pk:
+            return '—'
+        return f"{obj.total:,.2f} Ar".replace(',', ' ')
+
+
+@admin.register(Devis)
+class DevisAdmin(admin.ModelAdmin):
+    list_display = ['nom', 'auteur', 'date', 'nombre_lignes_display', 'total_display',
+                    'reste_display', 'partages_display']
+    list_filter = ['date', 'auteur']
+    search_fields = ['nom', 'auteur__username', 'lignes__objet']
+    date_hierarchy = 'date'
+    filter_horizontal = ['visible_par']
+    inlines = [LigneDevisInline]
+
+    @admin.display(description='Lignes')
+    def nombre_lignes_display(self, obj):
+        return obj.nombre_lignes
+
+    @admin.display(description='Total')
+    def total_display(self, obj):
+        return f"{obj.total:,.2f} Ar".replace(',', ' ')
+
+    @admin.display(description='Reste à régler')
+    def reste_display(self, obj):
+        reste = obj.reste_a_payer()
+        couleur = '#198754' if reste <= 0 else '#b45309'
+        return format_html('<strong style="color: {};">{:.2f} Ar</strong>', couleur, reste)
+
+    @admin.display(description='Partagé avec')
+    def partages_display(self, obj):
+        noms = ', '.join(u.username for u in obj.visible_par.all())
+        return noms or '—'
+
+
+@admin.register(PaiementDevis)
+class PaiementDevisAdmin(admin.ModelAdmin):
+    list_display = ['devis', 'declare_par', 'montant', 'moyen', 'confirme',
+                    'confirme_par', 'created_at']
+    list_filter = ['confirme', 'moyen']
+    search_fields = ['devis__nom', 'declare_par__username']
+    list_editable = ['confirme']
+    date_hierarchy = 'created_at'
+    readonly_fields = ['confirme_par']
+
+
 @admin.register(CategorieBudget)
 class CategorieBudgetAdmin(admin.ModelAdmin):
     """
@@ -208,9 +267,10 @@ class PermissionUtilisateurAdmin(admin.ModelAdmin):
     par un administrateur depuis cette page.
     """
 
-    list_display = ['utilisateur', 'statut', 'peut_lire', 'peut_ecrire', 'modifie_par', 'updated_at']
-    list_editable = ['peut_lire', 'peut_ecrire']
-    list_filter = ['peut_lire', 'peut_ecrire']
+    list_display = ['utilisateur', 'statut', 'peut_lire', 'peut_ecrire',
+                    'peut_creer_devis', 'modifie_par', 'updated_at']
+    list_editable = ['peut_lire', 'peut_ecrire', 'peut_creer_devis']
+    list_filter = ['peut_lire', 'peut_ecrire', 'peut_creer_devis']
     search_fields = ['utilisateur__username', 'utilisateur__profil__telephone']
     raw_id_fields = ['utilisateur', 'modifie_par']
     readonly_fields = ['updated_at']

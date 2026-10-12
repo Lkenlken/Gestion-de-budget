@@ -18,7 +18,13 @@ from decimal import Decimal  # noqa: E402
 from django.contrib.auth.models import User  # noqa: E402
 from django.utils import timezone  # noqa: E402
 
-from budget_app.models import BudgetMensuel, CategorieBudget, Depense, RepartitionCategorie
+from budget_app.models import BudgetMensuel, CategorieBudget, Depense, Devis, RepartitionCategorie
+from budget_app.models import permission_de
+
+# Compte dédié à la préparation des devis (DADA) : consultation du budget,
+# plus le droit de créer des devis. Aucun droit d'écriture sur les dépenses :
+# préparer un prévision ne doit pas risquer de fausser le budget réel.
+DADA_USER, DADA_PWD = 'DADA', 'dada1234'
 
 ADMIN_USER, ADMIN_PWD = 'admin', 'admin123'
 DEMO_USER, DEMO_PWD = 'utilisateur', 'user1234'
@@ -66,9 +72,42 @@ def creer_categories():
     return categories
 
 
+def creer_dada():
+    """Compte DADA : consultation + devis, sans écriture sur les dépenses."""
+    user, cree = User.objects.get_or_create(
+        username=DADA_USER,
+        defaults={'email': ''},
+    )
+    if cree:
+        user.set_password(DADA_PWD)
+        user.save()
+        print(f"Utilisateur créé : {DADA_USER} / {DADA_PWD}")
+    else:
+        print(f"Utilisateur existant : {DADA_USER}")
+
+    permission = permission_de(user)
+    permission.peut_lire = True      # il consulte le budget existant
+    permission.peut_ecrire = False   # mais n'y ajoute aucune dépense
+    permission.peut_creer_devis = True
+    permission.save()
+    return user
+
+
 def main():
     admin = get_or_create_user(ADMIN_USER, ADMIN_PWD, is_staff=True)
     user = get_or_create_user(DEMO_USER, DEMO_PWD)
+    dada = creer_dada()
+
+    # DADA voit les devis de démonstration de l'utilisateur normal.
+    budget_existant = BudgetMensuel.objects.first()
+    if budget_existant is not None:
+        Devis.objects.get_or_create(
+            nom='Prévision Novembre 2026',
+            auteur=dada,
+            defaults={
+                'notes': 'Estimation des courses du mois prochain.',
+            },
+        )
 
     categories = creer_categories()
 

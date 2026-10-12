@@ -199,6 +199,61 @@ input[data-categorie-choix]:focus-visible + .categorie-puce {
     --teinte: var(--text-muted);
 }
 
+/* --- Devis ----------------------------------------------------------- */
+
+/* Ligne du devis retirée : on l'estompe au lieu de la supprimer du DOM,
+   ce qui conserverait l'indexation des champs envoyés au serveur. */
+.ligne-devis.ligne-supprimee {
+    opacity: 0.35;
+    text-decoration: line-through;
+}
+
+/* Liste des cases à cocher de partage : deux colonnes sur grand écran,
+   une seule sur téléphone. */
+.liste-partage {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    gap: 0.4rem 1rem;
+    padding: 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    max-height: 15rem;
+    overflow-y: auto;
+}
+
+.partage-item {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.9rem;
+}
+
+.partage-item label {
+    cursor: pointer;
+}
+
+/* Champ « quantité × prix unitaire » : le total se lit d'un coup d'œil. */
+#table-lignes .ligne-somme {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+#total-devis {
+    font-variant-numeric: tabular-nums;
+    color: var(--primary);
+}
+
+/* Le pied de page de la table de lignes est toujours visible quand il
+   y en a beaucoup : sinon le total disparaît hors écran. */
+#table-lignes tfoot th {
+    position: sticky;
+    bottom: 0;
+    background: var(--surface-2);
+    border-top: 2px solid var(--border-strong);
+    z-index: 1;
+}
+
 /* --- Bascule « liste unique / par catégorie » (onglet Dépenses) -------- */
 
 .vue-bascule {

@@ -1,0 +1,278 @@
+{% extends 'budget_app/base.html' %}
+{% load l10n %}
+
+{% block title %}{% if nouveau %}Nouveau devis{% else %}Modifier le devis{% endif %} - Kendevis{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 fade-up">
+    <div>
+        <h1 class="h4 fw-bold mb-1">
+            <i class="bi bi-file-earmark-text me-2 text-primary"></i>
+            {% if nouveau %}Nouveau devis{% else %}Modifier « {{ devis.nom }} »{% endif %}
+        </h1>
+        <p class="text-muted small mb-0">
+            Total calculé automatiquement — amount =
+            quantité × prix unitaire, ligne par ligne.
+        </p>
+    </div>
+    <a class="btn btn-sm btn-outline-secondary"
+       href="{% if devis %}{% url 'budget_app:devis_detail' devis.pk %}{% else %}{% url 'budget_app:devis_liste' %}{% endif %}">
+        <i class="bi bi-arrow-left me-1"></i>Retour
+    </a>
+</div>
+
+{% if form.non_field_errors or formset.non_form_errors %}
+    <div class="alert alert-danger shadow-sm">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+        {% for error in formset.non_form_errors %}<div>{{ error }}</div>{% endfor %}
+    </div>
+{% endif %}
+
+<form method="post" novalidate id="form-devis">
+    {% csrf_token %}
+    {{ formset.management_form }}
+
+    <!-- Nom et partage -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-12 col-md-8">
+                    <label for="{{ form.nom.id_for_label }}" class="form-label fw-semibold">
+                        {{ form.nom.label }}
+                    </label>
+                    {{ form.nom }}
+                    {% if form.nom.errors %}
+                        <div class="text-danger small mt-1">{{ form.nom.errors }}</div>
+                    {% endif %}
+                </div>
+                <div class="col-12 col-md-4">
+                    <label for="{{ form.date.id_for_label }}" class="form-label fw-semibold">
+                        {{ form.date.label }}
+                    </label>
+                    {{ form.date }}
+                    {% if form.date.errors %}
+                        <div class="text-danger small mt-1">{{ form.date.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="col-12">
+                    <label for="{{ form.notes.id_for_label }}" class="form-label fw-semibold">
+                        {{ form.notes.label }}
+                    </label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}
+                        <div class="text-danger small mt-1">{{ form.notes.errors }}</div>
+                    {% endif %}
+                </div>
+
+                {% if form.visible_par.field.queryset %}
+                    <div class="col-12">
+                        <span class="form-label fw-semibold d-block">{{ form.visible_par.label }}</span>
+                        <div class="liste-partage">
+                            {% for choix in form.visible_par %}
+                                <div class="partage-item">
+                                    {{ choix.tag }}
+                                    <label for="{{ choix.id_for_label }}">
+                                        {{ choix.choice_label }}
+                                    </label>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        {% if form.visible_par.errors %}
+                            <div class="text-danger small mt-1">{{ form.visible_par.errors }}</div>
+                        {% endif %}
+                        <div class="form-text small">
+                            Vous pourrez modifier cette liste à tout moment depuis la
+                            fiche du devis. Vous seul gardez toujours l'accès.
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Lignes -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <h2 class="h6 fw-bold mb-0">
+                    <i class="bi bi-list-ul me-2 text-primary"></i>Lignes du devis
+                </h2>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="btn-ajouter-ligne">
+                    <i class="bi bi-plus-lg me-1"></i>Ajouter une ligne
+                </button>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table align-middle mb-0" id="table-lignes">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col" style="width:45%">Objet</th>
+                            <th scope="col" class="text-end" style="width:16%">Quantité</th>
+                            <th scope="col" class="text-end" style="width:22%">Prix unitaire</th>
+                            <th scope="col" class="text-end" style="width:14%">Somme</th>
+                            <th scope="col" style="width:3%"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ligne in formset %}
+                            <tr class="ligne-devis">
+                                <td>
+                                    {{ ligne.objet }}
+                                    {% if ligne.errors.objet %}
+                                        <div class="text-danger small">{{ ligne.errors.objet }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ ligne.quantite }}
+                                    {% if ligne.quantite.errors %}
+                                        <div class="text-danger small">{{ ligne.quantite.errors }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ ligne.prix_unitaire }}
+                                    {% if ligne.prix_unitaire.errors %}
+                                        <div class="text-danger small">{{ ligne.prix_unitaire.errors }}</div>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end fw-bold ligne-somme">—</td>
+                                <td class="text-end">
+                                    {% if ligne.DELETE %}{{ ligne.DELETE }}{% endif %}
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-danger btn-supprimer-ligne"
+                                            title="Retirer cette ligne">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+
+                    {% comment %}
+                    Gabarit d'une ligne vierge. Le JavaScript le duplique quand
+                    l'utilisateur clique sur « Ajouter une ligne » ; __prefix__
+                    est remplacé par l'indice de la nouvelle ligne.
+                    Retirer la ligne du DOM décalerait les index des champs
+                    suivants : le bouton masque donc la ligne et coche DELETE.
+                    {% endcomment %}
+                    <tbody id="ligne-vide" hidden>
+                        {% with vierge=formset.empty_form %}
+                            <tr class="ligne-devis">
+                                <td>{{ vierge.objet }}</td>
+                                <td>{{ vierge.quantite }}</td>
+                                <td>{{ vierge.prix_unitaire }}</td>
+                                <td class="text-end fw-bold ligne-somme">—</td>
+                                <td class="text-end">
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-danger btn-supprimer-ligne"
+                                            title="Retirer cette ligne">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        {% endwith %}
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr>
+                            <th colspan="3" class="text-end">TOTAL DU DEVIS</th>
+                            <th class="text-end fs-5" id="total-devis">0,00 Ar</th>
+                            <th></th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary btn-lg px-4">
+            <i class="bi bi-check2-circle me-1"></i>
+            {% if nouveau %}Enregistrer le devis{% else %}Enregistrer les modifications{% endif %}
+        </button>
+        <a href="{% if devis %}{% url 'budget_app:devis_detail' devis.pk %}{% else %}{% url 'budget_app:devis_liste' %}{% endif %}"
+           class="btn btn-outline-secondary btn-lg">Annuler</a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    /* Saisie des lignes : ajout dynamique, total automatique.
+       Le formulaire fonctionne aussi sans JavaScript — les lignes vides
+       supplémentaires sont simplement ignorées par le serveur. */
+    (function () {
+        var table = document.getElementById('table-lignes');
+        var tbody = table.querySelector('tbody');
+        var totalCellule = document.getElementById('total-devis');
+        var zoneTotal = document.querySelector('input[name="TOTAL_FORMS"]');
+        var bouton = document.getElementById('btn-ajouter-ligne');
+        var tbodyVide = document.getElementById('ligne-vide');
+        if (!table || !totalCellule || !zoneTotal || !bouton) return;
+
+        function nombre(brut) {
+            var valeur = parseFloat(String(brut).replace(',', '.'));
+            return isFinite(valeur) ? valeur : 0;
+        }
+
+        function formater(montant) {
+            return montant.toLocaleString('fr-FR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }) + ' Ar';
+        }
+
+        function recalculer() {
+            var total = 0;
+            tbody.querySelectorAll('tr.ligne-devis').forEach(function (ligne) {
+                if (ligne.classList.contains('ligne-supprimee')) {
+                    var cellule = ligne.querySelector('.ligne-somme');
+                    if (cellule) cellule.textContent = '—';
+                    return;
+                }
+                var quantite = ligne.querySelector('.quantite-ligne');
+                var prix = ligne.querySelector('.prix-ligne');
+                var somme = nombre(quantite && quantite.value) * nombre(prix && prix.value);
+                var affichage = ligne.querySelector('.ligne-somme');
+                if (affichage) affichage.textContent = formater(somme);
+                total += somme;
+            });
+            totalCellule.textContent = formater(total);
+        }
+
+        tbody.addEventListener('input', recalculer);
+
+        /* Supprimer une ligne : on la masque et on coche DELETE, ce qui laisse
+           le serveur l'ignorera. Supprimer la ligne du DOM ferait perdre le
+           numéro d'ordre des champs envoyés. */
+        tbody.addEventListener('click', function (evenement) {
+            var bouton = evenement.target.closest('.btn-supprimer-ligne');
+            if (!bouton) return;
+            evenement.preventDefault();
+            var ligne = bouton.closest('tr.ligne-devis');
+            var suppression = ligne.querySelector('input[name$="-DELETE"]');
+            if (suppression) suppression.checked = true;
+            ligne.classList.add('ligne-supprimee');
+            recalculer();
+        });
+
+        /* Ajout d'une ligne : on duplique le gabarit « ligne vide ». */
+        bouton.addEventListener('click', function () {
+            if (!tbodyVide) return;
+            var index = parseInt(zoneTotal.value, 10) || 0;
+            var html = tbodyVide.innerHTML.replace(/__prefix__/g, String(index));
+            var temporaire = document.createElement('tbody');
+            temporaire.innerHTML = html.trim();
+            var nouvelle = temporaire.querySelector('tr.ligne-devis');
+            if (!nouvelle) return;
+            tbody.appendChild(nouvelle);
+            zoneTotal.value = String(index + 1);
+            recalculer();
+            var objet = nouvelle.querySelector('input');
+            if (objet) objet.focus();
+        });
+
+        recalculer();
+    })();
+</script>
+{% endblock %}

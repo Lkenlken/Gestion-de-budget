@@ -14,6 +14,19 @@ urlpatterns = [
     path('statistiques/', views.statistiques, name='statistiques'),
     path('utilisateurs/', views.utilisateurs, name='utilisateurs'),
 
+    # Devis (création, historique, partage, PDF, paiement)
+    path('devis/', views.devis_liste, name='devis_liste'),
+    path('devis/nouveau/', views.devis_creer, name='devis_creer'),
+    path('devis/<int:devis_id>/', views.devis_detail, name='devis_detail'),
+    path('devis/<int:devis_id>/modifier/', views.devis_modifier, name='devis_modifier'),
+    path('devis/<int:devis_id>/supprimer/', views.devis_supprimer, name='devis_supprimer'),
+    path('devis/<int:devis_id>/pdf/', views.devis_pdf, name='devis_pdf'),
+    path('devis/<int:devis_id>/whatsapp/', views.devis_whatsapp, name='devis_whatsapp'),
+    path('devis/<int:devis_id>/paiement/', views.devis_paiement_declarer,
+         name='devis_paiement_declarer'),
+    path('devis/<int:devis_id>/paiement/<int:paiement_id>/valider/',
+         views.devis_paiement_valider, name='devis_paiement_valider'),
+
     # Répartition du budget par catégorie (administrateurs seulement)
     path('budget/<int:budget_id>/repartition/', views.repartition,
          name='repartition'),
