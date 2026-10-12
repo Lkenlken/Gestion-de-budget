@@ -203,9 +203,7 @@ class DevisForm(forms.ModelForm):
                 'rows': 3,
                 'placeholder': 'Observations imprimées sur le PDF (facultatif)',
             }),
-            'visible_par': forms.CheckboxSelectMultiple(attrs={
-                'class': 'liste-partage',
-            }),
+            'visible_par': forms.CheckboxSelectMultiple(),
         }
         labels = {
             'nom': 'Nom du devis',
@@ -223,7 +221,11 @@ class DevisForm(forms.ModelForm):
                 .order_by('username')
             ),
             required=False,
-            widget=forms.CheckboxSelectMultiple(attrs={'class': 'liste-partage'}),
+            # Aucune classe sur le widget : Django l'applique à chaque case,
+            # pas au conteneur. Or `.liste-partage` est un style de grille —
+            # sur une case à cocher, il transforme l'interface en barres
+            # grises illisibles. Le conteneur est habillé dans le gabarit.
+            widget=forms.CheckboxSelectMultiple(),
             label='Visible par',
             help_text=(
                 "Cochez les utilisateurs qui pourront consulter ce devis après "

@@ -138,6 +138,14 @@
                                 </td>
                                 <td class="text-end fw-bold ligne-somme">—</td>
                                 <td class="text-end">
+                                    {% comment %}
+                                    Django rend ce champ comme une case à cocher
+                                    visible, juste à côté du bouton ✕ : deux
+                                    contrôles pour la même action, et le second
+                                    décale la mise en page. Masquée en CSS
+                                    (`.ligne-devis input[name$="-DELETE"]`), elle
+                                    reste fonctionnelle pour le serveur.
+                                    {% endcomment %}
                                     {% if ligne.DELETE %}{{ ligne.DELETE }}{% endif %}
                                     <button type="button"
                                             class="btn btn-sm btn-outline-danger btn-supprimer-ligne"
@@ -202,13 +210,21 @@
        Le formulaire fonctionne aussi sans JavaScript — les lignes vides
        supplémentaires sont simplement ignorées par le serveur. */
     (function () {
-        var table = document.getElementById('table-lignes');
-        var tbody = table.querySelector('tbody');
-        var totalCellule = document.getElementById('total-devis');
-        var zoneTotal = document.querySelector('input[name="TOTAL_FORMS"]');
         var bouton = document.getElementById('btn-ajouter-ligne');
+        var table = document.getElementById('table-lignes');
+        var totalCellule = document.getElementById('total-devis');
         var tbodyVide = document.getElementById('ligne-vide');
-        if (!table || !totalCellule || !zoneTotal || !bouton) return;
+        if (!bouton || !table || !totalCellule || !tbodyVide) return;
+
+        var tbody = table.querySelector('tbody');
+
+        /* Le préfixe des champs vient de Django (« lignes- » ici). Chercher
+           un nom exact casse dès que le préfixe change : la recherche est
+           donc faite par suffixe. C'était le bug : `input[name="TOTAL_FORMS"]`
+           ne trouvait rien, le script s'arrêtait sur son garde-fou, et ni
+           l'ajout de ligne ni le total en direct ne fonctionnaient. */
+        var zoneTotal = document.querySelector('input[name$="-TOTAL_FORMS"]');
+        if (!zoneTotal) return;
 
         function nombre(brut) {
             var valeur = parseFloat(String(brut).replace(',', '.'));
@@ -258,7 +274,6 @@
 
         /* Ajout d'une ligne : on duplique le gabarit « ligne vide ». */
         bouton.addEventListener('click', function () {
-            if (!tbodyVide) return;
             var index = parseInt(zoneTotal.value, 10) || 0;
             var html = tbodyVide.innerHTML.replace(/__prefix__/g, String(index));
             var temporaire = document.createElement('tbody');

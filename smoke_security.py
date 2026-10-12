@@ -481,6 +481,41 @@ def test_devis():
     check('Formulaire de devis : messages d\'avertissement sur le mobile money'
           or 'mobile money' in page.lower(), True)
 
+    # Le JavaScript doit retrouver le champ de gestion quel que soit son
+    # prefixe ("lignes-TOTAL_FORMS", et non "TOTAL_FORMS"). Une recherche par
+    # nom exact echouait en silence : le script s'arretait sur son garde-fou,
+    # et ni l'ajout de ligne ni le total en direct ne fonctionnaient, sans
+    # la moindre erreur visible dans la console.
+    prefixe = re.search(r'name="([^"]*)-TOTAL_FORMS"', page)
+    check('Le champ de gestion du formulaire porte un prefixe',
+          prefixe is not None, prefixe.group(1) if prefixe else 'introuvable')
+    check('Le JavaScript cherche le champ par suffixe',
+          'input[name$="-TOTAL_FORMS"]' in page)
+    check('Le JavaScript ne cherche pas le champ par nom exact',
+          'querySelector(\'input[name="TOTAL_FORMS"]\')' not in page)
+
+    # La case DELETE ne doit pas etre affichee : le bouton croix s'en charge.
+    # La regle vit dans la feuille de style, pas dans la page.
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            'budget_app', 'static', 'budget_app', 'css',
+                            'pwa_onglets.css'), encoding='utf-8') as fichier:
+        css = fichier.read()
+    check("La case DELETE est masquee par la feuille de style",
+          re.search(r"input\[name\$='-DELETE'\]\s*\{\s*display:\s*none", css)
+          is not None)
+    check('Le bouton de retrait de ligne est present',
+          page.count('btn-supprimer-ligne') >= 2,
+          f"{page.count('btn-supprimer-ligne')} bouton(s)")
+
+    # Les cases de partage recoivent le style du conteneur, pas celui de
+    # chaque case : Django applique les attributs du widget a chaque input,
+    # ce qui transformait l'interface en barres grises.
+    check('Les cases de partage ne portent pas la classe du conteneur',
+          'name="visible_par" class="liste-partage"' not in page)
+    check('Le conteneur de partage porte la classe de grille',
+          'class="liste-partage"' in page
+          and page.count('class="partage-item"') >= 1)
+
     # Un compte sans le droit de devis ne doit pas y accéder, et la
     # redirection ne doit pas boucler.
     simple = new_opener()

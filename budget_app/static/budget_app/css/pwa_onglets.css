@@ -209,7 +209,9 @@ input[data-categorie-choix]:focus-visible + .categorie-puce {
 }
 
 /* Liste des cases à cocher de partage : deux colonnes sur grand écran,
-   une seule sur téléphone. */
+   une seule sur téléphone. La classe est portée par le conteneur écrit
+   dans le gabarit, jamais par le widget : Django appliquerait ces règles
+   à chaque case à cocher au lieu du conteneur. */
 .liste-partage {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
@@ -222,6 +224,14 @@ input[data-categorie-choix]:focus-visible + .categorie-puce {
     overflow-y: auto;
 }
 
+/* Marge entre la case et son libellé, et largeur naturelle : sans cela,
+   l'alignement dépend du navigateur. */
+.liste-partage input[type='checkbox'] {
+    margin-right: 0.15rem;
+    flex: 0 0 auto;
+    width: auto;
+}
+
 .partage-item {
     display: flex;
     align-items: center;
@@ -231,6 +241,12 @@ input[data-categorie-choix]:focus-visible + .categorie-puce {
 
 .partage-item label {
     cursor: pointer;
+}
+
+/* La case DELETE d'une ligne de devis est pilotée par le bouton ✕ :
+   l'afficher créerait un second contrôle pour la même action. */
+.ligne-devis input[name$='-DELETE'] {
+    display: none;
 }
 
 /* Champ « quantité × prix unitaire » : le total se lit d'un coup d'œil. */
