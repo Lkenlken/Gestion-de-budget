@@ -69,8 +69,13 @@ def formater_telephone(valeur):
     """
     Retourne une version lisible du numéro : `038 41 601 33`.
 
-    Si le numéro est stocké en E.164 mais que le préfixe national n'est pas
-    connu, le numéro est renvoyé tel quel.
+    Le regroupement suit l'usage local malgache : indicatif national de 3
+    chiffres, puis 2, 3 et 2 chiffres — soit 10 chiffres au total, la longueur
+    des numéros mobiles comme des lignes fixes.
+
+    Tout autre nombre de chiffres est renvoyé brut : sans découpage fiable,
+    un regroupement au hasard afficherait « 020 12 345 6 », ce qui est moins
+    lisible que le numéro d'origine.
     """
     numero = normaliser_telephone(valeur)
     if not numero:
@@ -82,5 +87,10 @@ def formater_telephone(valeur):
         return numero
 
     if len(national) == LONGUEUR_NATIONAL:
-        return ' '.join(national[i:i + 2] for i in range(0, LONGUEUR_NATIONAL, 2))
+        return ' '.join([
+            national[0:3],
+            national[3:5],
+            national[5:8],
+            national[8:10],
+        ])
     return national

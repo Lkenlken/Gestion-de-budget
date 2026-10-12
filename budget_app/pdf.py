@@ -213,8 +213,8 @@ def _ecrire(document, devis, contact, mobile_money):
                     "<b>Paiement par mobile money</b><br/>"
                     + (f"{_echapper(mobile_money.get('nom', ''))}<br/>"
                        if mobile_money.get('nom') else "")
-                    + (f"N° {_echapper(mobile_money.get('numero', ''))}<br/>"
-                       if mobile_money.get('numero') else "")
+                    + (f"N° {_echapper(mobile_money.get('numero_affiche') or mobile_money.get('numero', ''))}<br/>"
+                       if (mobile_money.get('numero_affiche') or mobile_money.get('numero')) else "")
                     + (_echapper(mobile_money.get('operateur', ''))
                        if mobile_money.get('operateur') else ""),
                     cellule,

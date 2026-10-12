@@ -294,6 +294,62 @@ input[data-categorie-choix]:focus-visible + .categorie-puce {
     border-left: 4px solid var(--text-muted);
 }
 
+/* --- Carte « où payer » (mobile money) ------------------------------- */
+
+.carte-mmv {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.carte-mmv-tete {
+    padding: 0.55rem 0.9rem;
+    font-size: 0.85rem;
+    font-weight: 700;
+    background: linear-gradient(90deg, #ff7900, #f5a623);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.carte-mmv-corps {
+    padding: 0.85rem 0.9rem;
+    background: var(--surface-2);
+}
+
+.carte-mmv-ligne {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.3rem 0;
+    font-size: 0.9rem;
+}
+
+.carte-mmv-ligne + .carte-mmv-ligne {
+    border-top: 1px dashed var(--border);
+}
+
+.carte-mmv-ligne span {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+/* Le numéro doit pouvoir être recopié sans se tromper de chiffre :
+   groupes de 3, 2, 3 et 2, alignés. */
+.carte-mmv-numero,
+.carte-mmv-montant {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.03em;
+    font-size: 1.05rem;
+}
+
+.carte-mmv-montant {
+    color: var(--primary);
+}
+
 /* --- Carte de catégorie cliquable (tableau de bord) -------------------- */
 
 .carte-categorie {

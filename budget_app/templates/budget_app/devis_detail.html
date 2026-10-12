@@ -186,6 +186,42 @@
             </div>
         </div>
 
+        <!-- Où envoyer l'argent : sans ce bloc, la déclaration de paiement
+             ci-dessous n'a pas de sens. -->
+        {% if mobile_money.numero %}
+            <div class="carte-mmv mt-3">
+                <div class="carte-mmv-tete">
+                    <i class="bi bi-phone-fill"></i>
+                    Payer par {{ mobile_money.operateur|default:"mobile money" }}
+                </div>
+                <div class="carte-mmv-corps">
+                    <div class="carte-mmv-ligne">
+                        <span>Nom du compte</span>
+                        <strong>{{ mobile_money.nom|default:"—" }}</strong>
+                    </div>
+                    <div class="carte-mmv-ligne">
+                        <span>Numéro</span>
+                        <strong class="carte-mmv-numero">
+                            {{ mobile_money.numero_affiche }}
+                        </strong>
+                    </div>
+                    {% if devis.reste_a_payer %}
+                        <div class="carte-mmv-ligne">
+                            <span>Montant à envoyer</span>
+                            <strong class="carte-mmv-montant">
+                                {{ devis.reste_a_payer|floatformat:2|unlocalize }} Ar
+                            </strong>
+                        </div>
+                    {% endif %}
+                    <button type="button" class="btn btn-sm btn-outline-primary mt-2"
+                            id="btn-copier-mmv"
+                            data-texte="{{ mobile_money.numero_affiche }}{% if devis.reste_a_payer %} — {{ devis.reste_a_payer|floatformat:0 }} Ar{% endif %}">
+                        <i class="bi bi-clipboard me-1"></i>Copier le numéro
+                    </button>
+                </div>
+            </div>
+        {% endif %}
+
         <div class="alert alert-warning small mt-3 mb-0">
             <i class="bi bi-exclamation-triangle-fill me-2"></i>
             L'application n'effectue <strong>aucun transfert</strong> : MVola,
@@ -279,4 +315,44 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    /* Copie du numéro mobile money : fonctionne sur poste et sur téléphone,
+       avec un repli sur execCommand quand le presse-papiers n'est pas
+       accessible (contexte non sécurisé, ancien navigateur). */
+    (function () {
+        var bouton = document.getElementById('btn-copier-mmv');
+        if (!bouton) return;
+        var texte = bouton.getAttribute('data-texte') || '';
+
+        function feedback() {
+            var initial = bouton.innerHTML;
+            bouton.innerHTML = '<i class="bi bi-check2"></i>Copié';
+            setTimeout(function () { bouton.innerHTML = initial; }, 1800);
+        }
+
+        bouton.addEventListener('click', function () {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(texte).then(feedback, copier_avec_selection);
+            } else {
+                copier_avec_selection();
+            }
+        });
+
+        function copier_avec_selection() {
+            var champ = document.createElement('textarea');
+            champ.value = texte;
+            champ.setAttribute('readonly', '');
+            champ.style.position = 'fixed';
+            champ.style.opacity = '0';
+            document.body.appendChild(champ);
+            champ.select();
+            try { document.execCommand('copy'); } catch (e) { /* rien de plus à faire */ }
+            document.body.removeChild(champ);
+            feedback();
+        }
+    })();
+</script>
 {% endblock %}

@@ -652,11 +652,18 @@ def _devis_autorise(devis, utilisateur, *, modification=False):
 
 
 def _paiement_money():
-    """Coordonnées de paiement mobile money de l'administrateur (facultatif)."""
+    """
+    Coordonnées de paiement mobile money de l'administrateur (facultatif).
+
+    Le numéro est renvoyé deux fois : brut, pour un lien `tel:` ou WhatsApp,
+    et formaté (`038 41 601 33`) pour être affiché et recopié.
+    """
+    numero = config('MOBILE_MONEY_NUMERO', default='').strip()
     return {
-        'numero': config('MOBILE_MONEY_NUMERO', default=''),
-        'nom': config('MOBILE_MONEY_NOM', default=''),
-        'operateur': config('MOBILE_MONEY_OPERATEUR', default=''),
+        'numero': numero,
+        'numero_affiche': formater_telephone(numero) or numero,
+        'nom': config('MOBILE_MONEY_NOM', default='').strip(),
+        'operateur': config('MOBILE_MONEY_OPERATEUR', default='').strip(),
     }
 
 
@@ -826,6 +833,7 @@ def devis_detail(request, devis_id):
         'partages_ids': list(devis.visible_par.values_list('id', flat=True)),
         'paiements': devis.paiements.select_related('declare_par', 'confirme_par'),
         'paiement_form': PaiementDevisForm(devis=devis),
+        'mobile_money': _paiement_money(),
         'onglet': 'devis',
         'peut_devis': peut_creer_devis(request.user),
     })

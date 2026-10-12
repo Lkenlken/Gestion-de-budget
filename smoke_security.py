@@ -426,12 +426,38 @@ def test_conversion_couleurs():
         obtenu = couleur_connue(valeur)
         check(f'Conversion {valeur!r} -> {attendu}', obtenu == attendu,
               f'obtenu {obtenu!r}')
-
     check('Un dégradé produit un linear-gradient',
           fond('bleu-degrade').startswith('linear-gradient'))
     check('Une couleur simple reste un hexadécimal',
           fond('cyan') == '#06b6d4', fond('cyan'))
     check('Libellé lisible', libelle('cyan-degrade') == 'Cyan dégradé')
+
+
+def test_format_telephone():
+    """Le numéro s'affiche en 03X XX XXX XX, quelle que soit la saisie."""
+    from budget_app.telephone import formater_telephone, normaliser_telephone
+
+    cas = [
+        ('0384160133', '038 41 601 33'),
+        ('038 41 601 33', '038 41 601 33'),
+        ('+261384160133', '038 41 601 33'),
+        ('00261384160133', '038 41 601 33'),
+        ('0340000001', '034 00 000 01'),
+        ('0321234567', '032 12 345 67'),
+    ]
+    for saisie, attendu in cas:
+        obtenu = formater_telephone(saisie)
+        check(f'Affichage {saisie!r} -> {attendu}', obtenu == attendu,
+              f'obtenu {obtenu!r}')
+
+    # Stockage : toujours au format international, sans espace.
+    check('Stockage normalisé en E.164',
+          normaliser_telephone('038 41 601 33') == '+261384160133')
+    # Un numéro trop court n'est pas regroupé de travers.
+    check('Numéro de longueur inattendue renvoyé brut',
+          formater_telephone('+2612012345') == '02012345',
+          formater_telephone('+2612012345'))
+
 
 
 def test_devis():
@@ -552,6 +578,8 @@ def main():
     print('\n--- Palette de couleurs ---')
     test_palette_couleurs()
     test_conversion_couleurs()
+    print('\n--- Format des numéros ---')
+    test_format_telephone()
     print('\n--- Devis ---')
     test_devis()
     print('\n--- Méthodes HTTP et droits ---')

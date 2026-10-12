@@ -54,7 +54,21 @@ Après enregistrement, la fiche du devis permet de :
   administrateurs y ont toujours accès) ;
 - télécharger le **PDF** (en-tête, lignes, total, reste à régler) ;
 - ouvrir **WhatsApp** avec le récapitulatif texte ;
-- déclarer un **paiement** par mobile money, que l'administrateur valide.
+- connaître le **numéro mobile money** formaté et le montant à envoyer, puis
+  déclarer le paiement, que l'administrateur valide.
+
+Les coordonnées de paiement se placent dans `.env` :
+
+```ini
+MOBILE_MONEY_NUMERO=0384160133
+MOBILE_MONEY_NOM=ANDONILANITRA Ken Jedidiah
+MOBILE_MONEY_OPERATEUR=MVola
+WHATSAPP_ADMIN=261384160133
+```
+
+Le numéro peut être écrit comme vous voulez (`0384160133`,
+`038 41 601 33`, `+261384160133`) : il est affiché en `038 41 601 33`, et
+c'est ce format qui est recopié.
 
 > ⚠️ **Limites assumées.** WhatsApp n'accepte pas d'envoyer un fichier depuis
 > un lien web : le PDF se télécharge puis se joint manuellement au message.
@@ -141,10 +155,11 @@ l'enregistrement est refusé et le montant manquant est indiqué.
   et retrait de lignes, nom propre à chaque devis, historique personnel,
   partage par cases à cocher, export PDF et envoi du récapitulatif sur
   WhatsApp.
-- **Paiement d'un devis par mobile money** : l'application **n'effectue aucun
-  transfert** — MVola et Airtel n'autorisent un virement depuis une application
-  qu'avec un contrat marchand. Elle affiche où payer (numéro, opérateur),
-  trace les déclarations de paiement et laisse l'administrateur les valider.
+- **Paiement d'un devis par mobile money** : la fiche du devis affiche le nom
+  du compte, le numéro formaté (`038 41 601 33`) et le montant à envoyer, avec
+  un bouton de copie. L'application **n'effectue aucun transfert** — MVola et
+  Airtel n'autorisent un virement depuis une application qu'avec un contrat
+  marchand. Elle trace les déclarations et l'administrateur les valide.
 - **Navigation par onglets** : Tableau de bord, Dépenses, Statistiques,
   Utilisateurs, Devis, Administration.
 - **Sous-budgets par catégorie** : l'administrateur répartit le budget initial
