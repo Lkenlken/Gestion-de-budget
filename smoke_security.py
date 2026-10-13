@@ -601,6 +601,38 @@ def test_devis():
           not peut_creer_devis(tiers))
 
 
+def test_operateurs():
+    """Les operateurs proposes sont ceux qui existent a Madagascar."""
+    from budget_app.models import libelle_operateur, PaiementDevis
+
+    codes = [code for code, _ in PaiementDevis.MOYENS]
+    check("L'operateur M'Vola est propose", 'mvola' in codes, str(codes))
+    check('Orange Money est propose', 'orange' in codes, str(codes))
+    check('Airtel Money est propose', 'airtel' in codes, str(codes))
+    check("Moov Money n'est pas propose (hors Madagascar)", 'moov' not in codes)
+
+    libelles = dict(PaiementDevis.MOYENS)
+    check("Le libelle de M'Vola mentionne Yas et Telma",
+          'Yas' in libelles['mvola'] and 'Telma' in libelles['mvola'],
+          libelles['mvola'])
+    check("Le libelle d'Orange mentionne Orange",
+          'Orange' in libelles['orange'], libelles['orange'])
+    check("Le libelle d'Airtel mentionne Airtel",
+          'Airtel' in libelles['airtel'], libelles['airtel'])
+
+    # Une saisie libre doit etre ramenee au libelle officiel.
+    for saisie in ['mvola', "M'Vola", 'MVOLA', 'TELMA', 'Yas']:
+        obtenu = libelle_operateur(saisie)
+        check(f'« {saisie} » reconnu comme M\'Vola',
+              obtenu == libelles['mvola'], obtenu)
+    check('« Orange Money » reconnu',
+          libelle_operateur('Orange Money') == libelles['orange'])
+    check('« airtel money » reconnu',
+          libelle_operateur('airtel money') == libelles['airtel'])
+    check('Une valeur inconnue est renvoyee telle quelle',
+          libelle_operateur('inconnu') == 'inconnu')
+
+
 def main():
     print('--- En-têtes HTTP ---')
     test_headers()
@@ -617,6 +649,8 @@ def main():
     test_format_telephone()
     print('\n--- Devis ---')
     test_devis()
+    print('\n--- Operateurs mobile money ---')
+    test_operateurs()
     print('\n--- Méthodes HTTP et droits ---')
     test_method_and_rights()
     print('\n--- Limitation des tentatives de connexion ---')

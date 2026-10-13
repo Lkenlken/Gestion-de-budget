@@ -565,23 +565,65 @@ class LigneDevis(models.Model):
         return (self.quantite or Decimal('0')) * (self.prix_unitaire or Decimal('0'))
 
 
+# Opérateurs de paiement électronique grand public à Madagascar.
+# M'Vola est le service de Telma ; « Yas » est également accepté, l'utilisateur
+# saisissant parfois le nom de la marque plutôt que celui du service.
+OPERATEURS = {
+    'mvola': "M'Vola (Yas / Telma)",
+    'orange': "Orange Money (Orange)",
+    'airtel': "Airtel Money (Airtel)",
+}
+
+# Variantes tolérées dans la configuration ou lors d'une saisie libre.
+_SYNONYMES = {
+    'mvola': 'mvola', "m'vola": 'mvola', 'm vola': 'mvola', 'mvola': 'mvola',
+    'yas': 'mvola', 'telma': 'mvola',
+    'orange': 'orange', 'orange money': 'orange',
+    'airtel': 'airtel', 'airtel money': 'airtel',
+}
+
+
+def libelle_operateur(valeur):
+    """
+    Retourne le libellé canonique d'un opérateur, quel que soit ce qui a été
+    saisi : « MVola », « m'vola », « TELMA » et « Yas » donnent tous
+    « M'Vola (Yas / Telma) ».
+
+    Une valeur inconnue est renvoyée telle quelle : elle reste affichable, et
+    l'application ne prétend pas en savoir plus sur les opérateurs.
+    """
+    if not valeur:
+        return ''
+    texte = str(valeur).strip().lower()
+    if texte in OPERATEURS:
+        return OPERATEURS[texte]
+    cle = _SYNONYMES.get(texte)
+    if cle:
+        return OPERATEURS[cle]
+    # Le nom de l'opérateur peut être fourni avec son libellé complet.
+    for nom, libelle in OPERATEURS.items():
+        if nom in texte or texte in libelle.lower():
+            return libelle
+    return str(valeur).strip()
+
+
 class PaiementDevis(models.Model):
     """
     Déclaration d'un paiement par mobile money.
 
-    L'application **n'effectue aucun transfert** :Mvola, Airtel Money et les
-    autres opérateurs n'autorisent un virement depuis une application qu'avec
-    un contrat marchand, que seul l'administrateur peut signer. Ce que permet
+    L'application **n'effectue aucun transfert** : M'Vola, Orange Money et
+    Airtel Money n'autorisent un virement depuis une application qu'avec un
+    contrat marchand, que seul l'administrateur peut signer. Ce que permet
     ce modèle, c'est la traçabilité : un utilisateur déclare avoir envoyé un
     montant, l'administrateur le vérifie et le valide.
     """
 
-    MOYENS = [
-        ('mvola', 'MVola (Orange)'),
-        ('airtel', 'Airtel Money'),
-        ('moov', 'Moov Money'),
+    MOYENS = (
+        ('mvola', "M'Vola (Yas / Telma)"),
+        ('orange', "Orange Money (Orange)"),
+        ('airtel', "Airtel Money (Airtel)"),
         ('autre', 'Autre moyen'),
-    ]
+    )
 
     devis = models.ForeignKey(
         Devis, on_delete=models.CASCADE,

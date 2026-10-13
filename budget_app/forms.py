@@ -294,7 +294,7 @@ class PaiementDevisForm(forms.ModelForm):
             'moyen': forms.Select(attrs={'class': 'form-select'}),
             'numero': forms.TextInput(attrs={
                 'class': 'form-control',
-                'placeholder': 'Ex : 034 00 000 00',
+                'placeholder': 'Ex : 038 41 601 33',
             }),
             'note': forms.Textarea(attrs={
                 'class': 'form-control',

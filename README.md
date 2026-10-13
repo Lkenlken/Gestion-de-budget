@@ -62,13 +62,18 @@ Les coordonnées de paiement se placent dans `.env` :
 ```ini
 MOBILE_MONEY_NUMERO=0384160133
 MOBILE_MONEY_NOM=ANDONILANITRA Ken Jedidiah
-MOBILE_MONEY_OPERATEUR=MVola
+MOBILE_MONEY_OPERATEUR=mvola
 WHATSAPP_ADMIN=261384160133
 ```
 
 Le numéro peut être écrit comme vous voulez (`0384160133`,
 `038 41 601 33`, `+261384160133`) : il est affiché en `038 41 601 33`, et
 c'est ce format qui est recopié.
+
+**Opérateurs proposés** : M'Vola (Yas / Telma), Orange Money (Orange) et
+Airtel Money (Airtel). Pour `MOBILE_MONEY_OPERATEUR`, les écritures `MVOLA`,
+`M'Vola`, `TELMA` et `Yas` sont toutes reconnues et affichées comme
+« M'Vola (Yas / Telma) ».
 
 > ⚠️ **Limites assumées.** WhatsApp n'accepte pas d'envoyer un fichier depuis
 > un lien web : le PDF se télécharge puis se joint manuellement au message.

@@ -32,6 +32,7 @@ from .models import (
     RepartitionCategorie,
     permission_de,
     peut_creer_devis,
+    libelle_operateur,
     telephone_de,
 )
 from .forms import (
@@ -663,7 +664,11 @@ def _paiement_money():
         'numero': numero,
         'numero_affiche': formater_telephone(numero) or numero,
         'nom': config('MOBILE_MONEY_NOM', default='').strip(),
-        'operateur': config('MOBILE_MONEY_OPERATEUR', default='').strip(),
+        # « mvola », « M'Vola », « TELMA » et « Yas » donnent tous le même
+        # libellé affiché.
+        'operateur': libelle_operateur(
+            config('MOBILE_MONEY_OPERATEUR', default='').strip()
+        ),
     }
 
 
