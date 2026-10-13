@@ -12,9 +12,9 @@
     --font-scale: 1;
 
     /* Palette */
-    --primary: #2563eb;
-    --primary-strong: #1d4ed8;
-    --primary-soft: #dbeafe;
+    --primary: #081052;
+    --primary-strong: #050b3a;
+    --primary-soft: #e4e6f2;
     --accent: #7c3aed;
     --success: #16a34a;
     --success-soft: #dcfce7;
@@ -25,14 +25,14 @@
     --info: #0891b2;
     --info-soft: #cffafe;
 
-    --gradient-primary: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+    --gradient-primary: linear-gradient(135deg, #081052 0%, #1e1b6b 100%);
     --gradient-danger: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
     --gradient-success: linear-gradient(135deg, #16a34a 0%, #10b981 100%);
     --gradient-surface: linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
 
     /* Surfaces (thème clair) */
     --bg: #eef2f9;
-    --bg-glow-1: rgba(37, 99, 235, 0.18);
+    --bg-glow-1: rgba(8, 16, 82, 0.18);
     --bg-glow-2: rgba(124, 58, 237, 0.16);
     --surface: #ffffff;
     --surface-2: #f8fafc;
@@ -58,11 +58,16 @@
     --transition: 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Thème sombre : appliqué par <html data-theme="dark"> (voir base.html) */
+/* Thème sombre : appliqué par <html data-theme="dark"> (voir base.html).
+   Le bleu marine #081052 du thème clair serait illisible sur un fond
+   presque noir : on en garde la famille de teinte, éclaircie. `--primary-strong`
+   est ici PLUS clair que `--primary`, à l'inverse du thème clair, parce que
+   c'est toujours le fond qui décide : on monte en luminance quand le fond
+   descend, pour ne jamais perdre le contraste. */
 [data-theme="dark"] {
-    --primary: #60a5fa;
-    --primary-strong: #3b82f6;
-    --primary-soft: rgba(59, 130, 246, 0.18);
+    --primary: #7c8ce0;
+    --primary-strong: #93a1e8;
+    --primary-soft: rgba(124, 140, 224, 0.18);
     --accent: #a78bfa;
     --success: #4ade80;
     --success-soft: rgba(74, 222, 128, 0.16);
@@ -73,10 +78,11 @@
     --info: #22d3ee;
     --info-soft: rgba(34, 211, 238, 0.16);
 
+    --gradient-primary: linear-gradient(135deg, #081052 0%, #3b3f9e 100%);
     --gradient-surface: linear-gradient(160deg, #111c33 0%, #0d1526 100%);
 
     --bg: #070d1a;
-    --bg-glow-1: rgba(59, 130, 246, 0.22);
+    --bg-glow-1: rgba(124, 140, 224, 0.22);
     --bg-glow-2: rgba(124, 58, 237, 0.20);
     --surface: #111c33;
     --surface-2: #16233d;
@@ -161,6 +167,9 @@ main {
     border-bottom: 1px solid var(--border);
     box-shadow: var(--shadow-xs);
     transition: background-color var(--transition), border-color var(--transition);
+    /* Au-dessus de la barre d'onglets (1015) : le menu du compte se déploie
+       vers le bas et passait sous elle. */
+    z-index: 1030;
 }
 
 .navbar-brand {
@@ -187,7 +196,7 @@ main {
     justify-content: center;
     color: #fff;
     background: var(--gradient-primary);
-    box-shadow: 0 6px 16px -6px rgba(37, 99, 235, 0.8);
+    box-shadow: 0 6px 16px -6px rgba(8, 16, 82, 0.7);
     transition: transform var(--transition), box-shadow var(--transition);
 }
 
@@ -307,6 +316,9 @@ main {
     background: var(--surface);
     animation: popIn var(--transition) both;
     transform-origin: top right;
+    /* Au-dessus de tout : le menu du compte est le seul élément censé
+       pouvoir chevaucher la barre d'onglets et le contenu. */
+    z-index: 1040;
 }
 
 .navbar .dropdown-item {

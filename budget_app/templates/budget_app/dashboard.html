@@ -37,71 +37,6 @@
         </div>
     {% endif %}
 </div>
-{% if categories %}
-<!-- Suivi par catégorie -->
-<div class="card shadow-sm border-0 mb-4 fade-up">
-    <div class="card-body">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-            <h2 class="h6 fw-bold mb-0">
-                <i class="bi bi-diagram-3 me-2 text-primary"></i>Suivi par catégorie
-            </h2>
-            {% if is_staff %}
-                <a class="btn btn-sm btn-outline-primary"
-                   href="{% url 'budget_app:repartition' budget.pk %}">
-                    <i class="bi bi-sliders me-1"></i>
-                    {% if repartition_manquante %}Répartir{% else %}Modifier{% endif %}
-                </a>
-            {% endif %}
-        </div>
-
-        {% if repartition_manquante %}
-            <p class="text-muted small mb-0">
-                <i class="bi bi-exclamation-triangle me-1"></i>
-                {% if is_staff %}
-                    Le budget n'est pas encore réparti par catégorie.
-                {% else %}
-                    Le budget n'a pas encore été réparti par son administrateur.
-                {% endif %}
-            </p>
-        {% else %}
-            <div class="row g-3">
-                {% for ligne in categories %}
-                    <div class="col-12 col-md-6 col-xl-4">
-                        {% comment %}
-                        Cliquer sur un poste préselectionne sa catégorie dans
-                        le formulaire de saisie ci-dessous.
-                        {% endcomment %}
-                        <div class="carte-categorie" data-choisir-categorie="{{ ligne.categorie.pk }}"
-                             role="button" tabindex="0"
-                             title="Ajouter une dépense dans « {{ ligne.categorie.nom }} »">
-                        <div class="d-flex justify-content-between align-items-baseline mb-1">
-                            <span class="fw-semibold">
-                                <i class="bi {{ ligne.categorie.icone }} me-1" style="color: {{ ligne.categorie.teinte }};"></i>{{ ligne.categorie.nom }}
-                            </span>
-                            <span class="small text-muted">
-                                {{ ligne.depense|floatformat:0|unlocalize }} /
-                                {{ ligne.alloue|floatformat:0|unlocalize }} Ar
-                            </span>
-                        </div>
-                        <div class="bar-track">
-                            <div class="bar-fill"
-                                 style="width: {% widthratio ligne.taux 1 100 %}%; background: {{ ligne.categorie.fond }};"></div>
-                        </div>
-                        <div class="small mt-1 {% if ligne.reste < 0 %}text-danger{% else %}text-muted{% endif %}">
-                            {% if ligne.reste < 0 %}
-                                Dépassement de {{ ligne.reste|cut:"-"|floatformat:0|unlocalize }} Ar
-                            {% else %}
-                                Il reste {{ ligne.reste|floatformat:0|unlocalize }} Ar
-                            {% endif %}
-                        </div>
-                        </div>
-                    </div>
-                {% endfor %}
-            </div>
-        {% endif %}
-    </div>
-</div>
-{% endif %}
 
 <!-- Budget Summary Cards -->
 <div class="row g-4 mb-4">
@@ -184,14 +119,97 @@
     {% endif %}
 </div>
 
+{% if categories %}
+<!-- Suivi par catégorie -->
+<div class="card shadow-sm border-0 mb-4 fade-up">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <h2 class="h6 fw-bold mb-0">
+                <i class="bi bi-diagram-3 me-2 text-primary"></i>Suivi par catégorie
+            </h2>
+            {% if is_staff %}
+                <a class="btn btn-sm btn-outline-primary"
+                   href="{% url 'budget_app:repartition' budget.pk %}">
+                    <i class="bi bi-sliders me-1"></i>
+                    {% if repartition_manquante %}Répartir{% else %}Modifier{% endif %}
+                </a>
+            {% endif %}
+        </div>
+
+        {% if repartition_manquante %}
+            <p class="text-muted small mb-0">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                {% if is_staff %}
+                    Le budget n'est pas encore réparti par catégorie.
+                {% else %}
+                    Le budget n'a pas encore été réparti par son administrateur.
+                {% endif %}
+            </p>
+        {% else %}
+            <div class="row g-3">
+                {% for ligne in categories %}
+                    <div class="col-12 col-md-6 col-xl-4">
+                        {% comment %}
+                        Cliquer sur un poste préselectionne sa catégorie dans
+                        le formulaire de saisie ci-dessous.
+                        {% endcomment %}
+                        <div class="carte-categorie" data-choisir-categorie="{{ ligne.categorie.pk }}"
+                             role="button" tabindex="0"
+                             title="Ajouter une dépense dans « {{ ligne.categorie.nom }} »">
+                        <div class="d-flex justify-content-between align-items-baseline mb-1">
+                            <span class="fw-semibold">
+                                <i class="bi {{ ligne.categorie.icone }} me-1" style="color: {{ ligne.categorie.teinte }};"></i>{{ ligne.categorie.nom }}
+                            </span>
+                            <span class="small text-muted">
+                                {{ ligne.depense|floatformat:0|unlocalize }} /
+                                {{ ligne.alloue|floatformat:0|unlocalize }} Ar
+                            </span>
+                        </div>
+                        <div class="bar-track">
+                            <div class="bar-fill"
+                                 style="width: {% widthratio ligne.taux 1 100 %}%; background: {{ ligne.categorie.fond }};"></div>
+                        </div>
+                        <div class="small mt-1 {% if ligne.reste < 0 %}text-danger{% else %}text-muted{% endif %}">
+                            {% if ligne.reste < 0 %}
+                                Dépassement de {{ ligne.reste|cut:"-"|floatformat:0|unlocalize }} Ar
+                            {% else %}
+                                Il reste {{ ligne.reste|floatformat:0|unlocalize }} Ar
+                            {% endif %}
+                        </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 <!-- Formulaire d'ajout de dépense -->
 {% if budget %}
 <div class="row g-4 mb-4">
     <div class="col-12 col-lg-6">
+        {% comment %}
+        Le formulaire est replié : la carte ne montre que son titre, et c'est
+        un clic dessus qui l'ouvre. Il se referme de lui-même après
+        l'enregistrement, puisque la vue est rechargée. Exception : si la
+        saisie est rejetée, `saisie_ouverte` le rouvre — sinon l'utilisateur
+       perdrait ce qu'il venait de taper sans jamais voir l'erreur.
+        {% endcomment %}
         <div class="card shadow-sm border-0">
-            <div class="card-header bg-white border-0 py-3">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-plus-circle text-primary me-2"></i>Nouvelle Dépense</h5>
-            </div>
+            <button type="button" class="card-header btn-collapse-depense w-100"
+                    data-bs-toggle="collapse" data-bs-target="#zone-saisie-depense"
+                    aria-expanded="{% if saisie_ouverte %}true{% else %}false{% endif %}"
+                    aria-controls="zone-saisie-depense">
+                <span class="fw-bold text-start">
+                    <i class="bi bi-plus-circle text-primary me-2"></i>Nouvelle Dépense
+                </span>
+                <span class="text-muted small text-end">
+                    <span class="d-none d-sm-inline">Cliquer pour saisir</span>
+                    <i class="bi bi-chevron-down ms-2" id="fleche-saisie"></i>
+                </span>
+            </button>
+            <div class="collapse {% if saisie_ouverte %}show{% endif %}" id="zone-saisie-depense">
             <div class="card-body">
                 <form method="post" id="depense-form" novalidate>
                     {% csrf_token %}
@@ -293,6 +311,7 @@
                     </div>
                 </form>
             </div>
+            </div>
         </div>
     </div>
 
@@ -358,6 +377,10 @@
                        placeholder="Rechercher une dépense..." aria-label="Rechercher une dépense">
             </div>
             <span class="badge bg-primary fs-6 px-3 py-2" id="depenses-count">{{ depenses|length }} dépenses</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-voir-plus"
+                    aria-expanded="false" aria-controls="depenses-table">
+                <i class="bi bi-chevron-down" aria-hidden="true"></i>Voir plus
+            </button>
         </div>
     </div>
     <div class="card-body p-0">
@@ -378,8 +401,14 @@
                         </tr>
                     </thead>
                     <tbody>
+                        {% comment %}
+                        Cinq lignes sont visibles, le reste est replié derrière
+                        « Voir plus ». Le repli est fait en JavaScript, pas
+                        ici : la recherche doit pouvoir retrouver une ligne
+                        repliée sans avoir à tout déplier d'abord.
+                        {% endcomment %}
                         {% for depense in depenses %}
-                        <tr>
+                        <tr {% if forloop.counter0 >= 5 %}data-replie="1"{% endif %}>
                             <td class="ps-3">
                                 <span class="fw-medium">{{ depense.date|date:"d/m/Y" }}</span>
                                 <br><small class="text-muted">{{ depense.created_at|date:"H:i" }}</small>
@@ -430,17 +459,38 @@
 {% block extra_js %}
 <script>
     /* Un clic sur une carte de catégorie (bloc « Suivi par catégorie »)
-       préselectionne cette catégorie dans le formulaire de saisie et y
-       amène le curseur : plus besoin d'ouvrir une liste déroulante pour
-       choisir le poste d'une dépense alimentaire. */
+       ouvre le formulaire de saisie et y présélectionne la catégorie :
+       plus besoin de déplier le formulaire, puis d'ouvrir une liste
+       déroulante, pour choisir le poste d'une dépense alimentaire. */
     (function () {
         var cartes = document.querySelectorAll('[data-choisir-categorie]');
         if (!cartes.length) return;
 
         var cases = document.querySelectorAll('input[data-categorie-choix]');
         var designation = document.getElementById('id_designation');
+        var zone = document.getElementById('zone-saisie-depense');
+        var bouton = zone && zone.previousElementSibling;
+        var fleche = document.getElementById('fleche-saisie');
+
+        /* La zone est repliée par défaut. Bootstrap gère lui-même
+           l'ouverture ; on se contente de garder la flèche dans le bon sens
+           et de renderer le focus quand le formulaire vient de s'ouvrir. */
+        function suivreOuverture(ouvert) {
+            if (fleche) fleche.className = 'bi ms-2 ' + (ouvert ? 'bi-chevron-up' : 'bi-chevron-down');
+        }
+        if (zone) {
+            zone.addEventListener('shown.bs.collapse', function () {
+                suivreOuverture(true);
+                if (designation) designation.focus();
+            });
+            zone.addEventListener('hidden.bs.collapse', function () { suivreOuverture(false); });
+            suivreOuverture(zone.classList.contains('show'));
+        }
 
         function choisir(identifiant) {
+            if (bouton && zone && !zone.classList.contains('show')) {
+                bouton.click();
+            }
             cases.forEach(function (entree) {
                 if (entree.value === String(identifiant)) entree.checked = true;
             });

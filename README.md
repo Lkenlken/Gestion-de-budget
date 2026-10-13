@@ -162,11 +162,14 @@ l'enregistrement est refusé et le montant manquant est indiqué.
   WhatsApp.
 - **Paiement d'un devis par mobile money** : la fiche du devis affiche le nom
   du compte, le numéro formaté (`038 41 601 33`) et le montant à envoyer, avec
-  un bouton de copie. L'application **n'effectue aucun transfert** — MVola et
-  Airtel n'autorisent un virement depuis une application qu'avec un contrat
-  marchand. Elle trace les déclarations et l'administrateur les valide.
+  un bouton de copie. L'application **n'effectue aucun transfert** — M'Vola,
+  Orange Money et Airtel Money n'autorisent un virement depuis une application
+  qu'avec un contrat marchand. Elle trace les déclarations et l'administrateur
+  les valide. Opérateurs proposés : M'Vola (Yas / Telma), Orange Money
+  (Orange), Airtel Money (Airtel).
 - **Navigation par onglets** : Tableau de bord, Dépenses, Statistiques,
-  Utilisateurs, Devis, Administration.
+  Utilisateurs, Devis, Administration. L'onglet Devis suit le droit
+  « créer un devis », présent sur toutes les pages, tableau de bord compris.
 - **Sous-budgets par catégorie** : l'administrateur répartit le budget initial
   en postes (courses, provisions, transport…) ; chaque dépense est rattachée à
   un poste, ce qui affiche « Courses : 50 000 / 100 000 Ar » et le solde
@@ -175,18 +178,29 @@ l'enregistrement est refusé et le montant manquant est indiqué.
 - **Application installable** (PWA) : une icône sur l'écran d'accueil du
   téléphone ou de l'ordinateur, ouverture en plein écran, raccourcis vers
   Budget / Dépenses / Stats, et ouverture du tableau de bord sans connexion.
-- **Tableau de bord** : budget initial, total dépensé, solde restant, barre de
-  progression, compteurs animés et historique des dépenses.
-- **Ajout de dépense** : calcul du montant total en temps réel (prix unitaire ×
-  quantité), validation côté client et côté serveur.
+- **Tableau de bord** : budget initial, total dépensé et solde restant en
+  premier, puis le suivi par catégorie, puis le récapitulatif et l'historique.
+  Barre de progression et compteurs animés.
+- **Ajout de dépense** : la carte « Nouvelle Dépense » est repliée et s'ouvre
+  au clic sur son titre ; le formulaire se referme après chaque enregistrement.
+  Un clic sur un poste ouvre le formulaire avec la catégorie déjà présélectionnée.
+  Le montant total de la ligne se calcule en temps réel (prix unitaire ×
+  quantité), validé côté client et côté serveur.
+- **Historique replié** : cinq lignes visibles, le reste derrière « Voir plus ».
+  Une recherche déplie le tableau si elle trouve une ligne parmi les repliées,
+  faute de quoi taper le nom d'une dépense ancienne afficherait « aucun
+  résultat ».
 - **Navigation dans l'historique** : boutons « mois précédent / mois suivant »
   (réservés aux administrateurs), sélecteur via `?b=<id>`.
 - **Recherche instantanée** dans le tableau des dépenses.
 - **Thème clair / sombre** et **taille de police** (A- / A / A+) mémorisés dans
-  le navigateur.
+  le navigateur. Le bleu de la marque est `#081052` ; en thème sombre il est
+  éclairci (`#7c8ce0`) parce que `#081052` serait illisible sur un fond noir.
 - **Interface** : palette de couleurs unifiée, cartes animées au survol, onde au
   clic, ombres et dégradés, animations d'apparition, `prefers-reduced-motion`
-  respecté, responsive mobile, styles d'impression.
+  respecté, responsive mobile, styles d'impression. Les deux barres collantes
+  (navigation puis onglets) sont empilées et non superposées : la seconde se
+  cale sous la première, dont la hauteur est mesurée en JavaScript.
 - **Administration Django** : listes, filtres, recherche, montants colorés.
 
 ---
@@ -271,6 +285,25 @@ fonctionne), mais l'affichage ne l'est pas.
 git log --oneline -1
 grep -c "tabs-nav" budget_app/templates/budget_app/base.html
 ```
+
+### ⚠️ Après un changement de CSS ou de JavaScript : Ctrl+Maj+R
+
+Les fichiers statiques sont servis **sans empreinte dans leur nom**
+(`StaticFilesStorage`) et avec `WHITENOISE_MAX_AGE = 30 jours`. Un navigateur
+conserve donc l'ancienne feuille de style ou l'ancien script pendant un mois.
+
+C'est le piège le plus fréquent de ce projet : après une mise en ligne, le
+code Python est à jour, les pages HTML sont à jour, et pourtant l'ancien
+JavaScript continue de s'exécuter. Il faut donc **forcer le rechargement** :
+
+- **Ctrl+Maj+R** sur PC, ou long-appui sur « Recharger » puis « Forcer le
+  rechargement des ressources » sur téléphone.
+- `python manage.py collectstatic --noinput` **puis Reload** sur
+  PythonAnywhere, sans quoi WhiteNoise sert l'ancien contenu du dossier
+  `staticfiles/`.
+
+Si un correctif « ne marche pas » après une mise en ligne, vérifiez d'abord
+cela avant de chercher plus loin.
 
 ### Sauvegardes
 

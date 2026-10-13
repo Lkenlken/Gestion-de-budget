@@ -21,9 +21,9 @@ import zlib
 RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DESTINATION = os.path.join(RACINE, 'budget_app', 'static', 'budget_app', 'icons')
 
-# Couleurs de la marque (mêmes valeurs que --primary-strong / --primary).
-HAUT = (0x3B, 0x82, 0xF6)   # blue-500
-BAS = (0x1D, 0x4E, 0xD8)    # blue-700
+# Couleurs de la marque (mêmes valeurs que --primary / --gradient-primary).
+HAUT = (0x08, 0x10, 0x52)   # #081052
+BAS = (0x1E, 0x1B, 0x6B)    # #1e1b6b, seconde teinte du dégradé
 BLANC = (255, 255, 255)
 
 ECHELLE = 2  # suréchantillonnage pour l'anticrénelage

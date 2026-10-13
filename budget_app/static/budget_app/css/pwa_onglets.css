@@ -9,8 +9,15 @@
 
 .tabs-nav {
     position: sticky;
-    top: 0;
-    z-index: 1020;
+    /* La barre se colle SOUS la barre de navigation, pas dessus.
+       Les deux étaient en `top: 0` avec le même `z-index: 1020` : dès que la
+       page défilait, la barre d'onglets passait au-dessus de la barre de
+       navigation (même z-index, donc le dernier dans le document gagne) et
+       interceptait les clics — le menu du compte devenait inatteignable.
+       `--navbar-hauteur` est mesurée par ui.js : la hauteur change selon
+       l'écran, la taille de police et l'ouverture du menu mobile. */
+    top: var(--navbar-hauteur, 61px);
+    z-index: 1015;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
     box-shadow: var(--shadow-xs);
@@ -373,6 +380,44 @@ input[data-categorie-choix]:focus-visible + .categorie-puce {
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: background-color var(--transition-fast), transform var(--transition-fast);
+}
+
+/* En-tête repliable de la carte « Nouvelle Dépense » : c'est un <button>,
+   pas un <div>, pour que le clavier et les lecteurs d'écran le traitent
+   comme un vrai contrôle. Bootstrap remettrait ses bordures par défaut,
+   d'où la remise à zéro ci-dessous. */
+.btn-collapse-depense {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 1rem 1.25rem;
+    background: var(--surface);
+    border: 0;
+    border-radius: var(--radius) var(--radius) 0 0;
+    color: var(--text);
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+}
+
+.btn-collapse-depense:hover,
+.btn-collapse-depense:focus-visible {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.btn-collapse-depense:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+}
+
+/* La flèche indique l'état, pas l'action : vers le haut quand c'est déjà
+   ouvert. La rotation est faite en JavaScript, via la classe `bi-chevron-up`. */
+.btn-collapse-depense .bi-chevron-down,
+.btn-collapse-depense .bi-chevron-up {
+    display: inline-block;
+    transition: transform var(--transition);
 }
 
 .carte-categorie:hover,

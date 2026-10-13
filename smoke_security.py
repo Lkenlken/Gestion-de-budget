@@ -9,11 +9,19 @@ Vérifie :
   5. Un utilisateur non administrateur ne peut pas naviguer dans l'historique.
   6. La connexion par NUMÉRO DE TÉLÉPHONE fonctionne et varie selon la
      façon dont le numéro est saisi (0384160133 = 038 41 601 33 = +261...).
+  7. Le tableau de bord reste cohérent : onglet Devis visible partout, suivi
+     par catégorie sous les trois cartes, formulaire de dépense replié,
+     historique limité à cinq lignes, barres collantes superposées sinon.
+  8. Le bleu de la marque est #081052.
+
+Les défauts couverts ici étaient tous silencieux : aucune erreur, aucune
+trace dans la console — seulement un affichage faux.
 
 Usage : python smoke_security.py
 """
 import re
 import time
+import datetime
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -34,6 +42,11 @@ UTILISATEUR_PASSWORD = 'user1234'
 # il doit être renvoyé vers la page de connexion.
 SANS_ACCES_TELEPHONE = '0340000003'
 SANS_ACCES_PASSWORD = 'user1234'
+# Compte non-administrateur disposant du droit « Devis ». C'est le cas qui a
+# signalé le défaut : l'onglet Devis manquait sur le tableau de bord alors
+# qu'il apparaissait sur toutes les autres pages.
+DADA_TELEPHONE = '0341100000'
+DADA_PASSWORD = 'dada1234'
 
 
 def check(label, condition, detail=''):
@@ -76,6 +89,58 @@ def post(opener, url, token):
         return response.status, response.geturl()
     except urllib.error.HTTPError as error:
         return error.code, url
+
+
+def post_form(opener, url, donnees):
+    """Envoie un formulaire et rend la page obtenue, redirections suivies."""
+    page = opener.open(url).read().decode('utf-8', 'replace')
+    token = re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"', page).group(1)
+    payload = urllib.parse.urlencode(dict(donnees, csrfmiddlewaretoken=token)).encode()
+    request = urllib.request.Request(
+        url, data=payload, headers={'Referer': url})
+    try:
+        return opener.open(request).read().decode('utf-8', 'replace')
+    except urllib.error.HTTPError as error:
+        return error.read().decode('utf-8', 'replace')
+
+
+def date_du_jour():
+    return datetime.date.today().isoformat()
+
+
+def zone_saisie(fragment):
+    """Classe réellement rendue sur la zone de saisie du formulaire."""
+    trouve = re.search(r'id="zone-saisie-depense"', fragment)
+    if not trouve:
+        return None
+    debut = fragment.rfind('<div', 0, trouve.start())
+    classes = re.search(r'class="([^"]*)"', fragment[debut:trouve.start()])
+    return classes.group(1) if classes else ''
+
+
+def z_index(feuille, selecteur):
+    """
+    z-index de la première règle dont le sélecteur est exactement celui
+    demandé. La précision est indispensable : sans elle, `.navbar`
+    ramasserait aussi `.navbar .dropdown-menu` et le test ne testerait
+    plus rien.
+
+    Les commentaires sont retirés avant la lecture : une règle qui
+    explique l'ancien bug en citant l'ancienne valeur ferait passer le
+    test pour la mauvaise raison.
+    """
+    feuille = re.sub(r'/\*.*?\*/', '', feuille, flags=re.S)
+    trouve = re.search(r'(?m)^' + re.escape(selecteur) + r'\s*\{([^}]*)\}', feuille)
+    if not trouve:
+        return None
+    valeur = re.search(r'z-index:\s*(\d+)', trouve.group(1))
+    return int(valeur.group(1)) if valeur else None
+
+
+def lire_fichier(*chemins):
+    racine = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(racine, *chemins), encoding='utf-8') as fichier:
+        return fichier.read()
 
 
 def csrf_of(opener, url=f'{BASE}/'):
@@ -633,6 +698,148 @@ def test_operateurs():
           libelle_operateur('inconnu') == 'inconnu')
 
 
+def test_tableau_de_bord():
+    """Tableau de bord : navigation, ordre des blocs, formulaire et historique."""
+    admin = new_opener()
+    login(admin, ADMIN_TELEPHONE, ADMIN_PASSWORD)
+    page = admin.open(f'{BASE}/').read().decode('utf-8', 'replace')
+
+    # --- Onglet Devis présent sur le tableau de bord -----------------------
+    # La barre de navigation dépend du drapeau `peut_devis` du CONTEXTE.
+    # Il manquait sur cette vue : l'onglet disparaissait du tableau de bord
+    # alors qu'il était présent sur tous les autres onglets.
+    avec_droits = new_opener()
+    login(avec_droits, DADA_TELEPHONE, DADA_PASSWORD)
+    page_dada = avec_droits.open(f'{BASE}/').read().decode('utf-8', 'replace')
+    check("L'onglet Devis est sur le tableau de bord (utilisateur autorisé)",
+          'bi-file-earmark-text' in page_dada)
+    check("L'onglet Devis est sur le tableau de bord (administrateur)",
+          'bi-file-earmark-text' in page)
+    check("L'onglet Devis est bien sur cette page, et pas sur une autre",
+          '/devis/' in page_dada)
+
+    # --- Ordre des blocs ---------------------------------------------------
+    pos_cards = page.find('Budget Initial')
+    pos_suivi = page.find('Suivi par catégorie')
+    check("Le suivi par catégorie est sous les trois cartes",
+          pos_cards != -1 and pos_suivi != -1 and pos_cards < pos_suivi,
+          f"cartes={pos_cards}, suivi={pos_suivi}")
+
+    # --- Formulaire de dépense replié -------------------------------------
+    check("Le formulaire de dépense est replié par défaut",
+          zone_saisie(page) is not None
+          and 'collapse' in zone_saisie(page)
+          and 'show' not in zone_saisie(page),
+          repr(zone_saisie(page)))
+    check("Le formulaire s'ouvre au clic sur son titre",
+          'data-bs-target="#zone-saisie-depense"' in page)
+    check("Le titre du formulaire est un vrai bouton (clavier, lecteurs d'écran)",
+          'btn-collapse-depense' in page)
+    check("Un clic sur une catégorie ouvre le formulaire de saisie",
+          'data-choisir-categorie' in page)
+
+    # Une saisie rejetée doit rouvrir le formulaire : sinon l'utilisateur ne
+    # voit ni l'erreur, ni ce qu'il vient de taper.
+    page_refusee = post_form(admin, f'{BASE}/', {
+        'date': '', 'designation': '', 'prix_unitaire': 'abc',
+        'quantite': '0', 'categorie': '',
+    })
+    check("Le formulaire se rouvre si la saisie est rejetée",
+          zone_saisie(page_refusee) is not None
+          and 'show' in zone_saisie(page_refusee),
+          repr(zone_saisie(page_refusee)))
+    check("Le formulaire rejeté affiche une erreur",
+          'is-invalid' in page_refusee or 'text-danger' in page_refusee)
+
+    # ...et se referme une fois l'enregistrement accepté.
+    page_ok = post_form(admin, f'{BASE}/', {
+        'date': date_du_jour(), 'designation': 'TEST-REPLI-UNITAIRE',
+        'prix_unitaire': '1000', 'quantite': '1', 'categorie': '',
+    })
+    check("Le formulaire se referme après un enregistrement accepté",
+          zone_saisie(page_ok) is not None
+          and 'show' not in zone_saisie(page_ok),
+          repr(zone_saisie(page_ok)))
+    check("La dépense enregistrée apparaît dans l'historique",
+          'TEST-REPLI-UNITAIRE' in page_ok)
+    check("Le message de confirmation est affiché",
+          'Dépense ajoutée' in page_ok)
+
+    # Nettoyage : le test ne doit pas laisser de dépense derrière lui, sinon
+    # les exécutions successives font grossir l'historique.
+    ligne_test = re.search(
+        r'<form method="post" action="([^"]*supprimer[^"]*)"', page_ok)
+    if ligne_test is None:
+        check("La dépense de test peut être supprimée", False,
+              "aucun formulaire de suppression trouvé")
+    else:
+        url = ligne_test.group(1).replace(BASE, '')
+        statut, _ = post(admin, f'{BASE}{url}', csrf_of(admin))
+        check("La dépense de test est supprimée",
+              statut == 200 and 'TEST-REPLI-UNITAIRE'
+              not in admin.open(f'{BASE}/').read().decode('utf-8', 'replace'),
+              f"statut={statut}")
+
+    # --- Historique limité à cinq lignes ----------------------------------
+    check("L'historique propose un bouton voir plus / voir moins",
+          'id="btn-voir-plus"' in page)
+    corps = page.split('id="depenses-table"')[1].split('</table>')[0]
+    corps = corps.split('<tbody')[1]
+    lignes = [l for l in re.findall(r'<tr[^>]*>', corps) if 'search-empty' not in l]
+    repliees = [l for l in lignes if 'data-replie="1"' in l]
+    check("Les lignes au-delà de la cinquième sont marquées comme repliées",
+          repliees == lignes[5:],
+          f"{len(repliees)} repliée(s) sur {len(lignes)} ligne(s)")
+    check("Exactement cinq lignes restent visibles au chargement",
+          len(lignes) - len(repliees) == 5,
+          f"{len(lignes) - len(repliees)} visible(s) sur {len(lignes)}")
+    check("Les cinq premières lignes ne sont pas marquées",
+          all('data-replie' not in l for l in lignes[:5]))
+
+    # --- Recherche et repli ne doivent pas se contredire ------------------
+    js = lire_fichier('budget_app', 'static', 'budget_app', 'js', 'ui.js')
+    check("La recherche et le repli partagent la même fonction",
+          'function initHistorique(' in js)
+    check("Une recherche déplie le tableau si elle trouve une ligne repliée",
+          'trouveeReplie' in js)
+    check("Le repli et le filtre sont deux états distincts",
+          'dataset.replie' in js and 'dataset.filtre' in js)
+    check("La hauteur de la barre de navigation est mesurée",
+          'function initStickyOffset(' in js and '--navbar-hauteur' in js)
+
+    # --- Les barres collantes ne doivent plus se chevaucher ----------------
+    css = lire_fichier('budget_app', 'static', 'budget_app', 'css', 'style.css')
+    css_onglets = lire_fichier('budget_app', 'static', 'budget_app', 'css',
+                               'pwa_onglets.css')
+    z_nav = z_index(css, '.navbar')
+    z_onglets = z_index(css_onglets, '.tabs-nav')
+    z_menu = z_index(css, '.navbar .dropdown-menu')
+    check("La barre de navigation est au-dessus de la barre d'onglets",
+          z_nav is not None and z_onglets is not None and z_nav > z_onglets,
+          f"navbar={z_nav}, onglets={z_onglets}")
+    check("Les deux barres ne partagent plus le même z-index",
+          not (z_nav == z_onglets), f"les deux={z_nav}")
+    check("La barre d'onglets est bien sous la barre de navigation",
+          z_onglets == 1015 and z_nav == 1030,
+          f"onglets={z_onglets}, navbar={z_nav}")
+    check("La barre d'onglets se décale sous la barre de navigation",
+          'top: var(--navbar-hauteur' in css_onglets)
+    check("Le menu du compte est au-dessus des barres collantes",
+          z_menu is not None and z_menu > max(z_nav or 0, z_onglets or 0),
+          f"menu={z_menu}")
+
+    # --- Couleur de marque -------------------------------------------------
+    check("La couleur principale est le bleu marine #081052",
+          '--primary: #081052' in css)
+    check("La couleur annoncée au navigateur (barre d'état) suit",
+          'content="#081052"' in page)
+    check("Le thème sombre garde la même famille de teinte",
+          '--primary: #7c8ce0' in css)
+    from budget_app.pwa import COULEUR_THEME
+    check("La couleur du manifeste PWA est #081052",
+          COULEUR_THEME == '#081052', COULEUR_THEME)
+
+
 def main():
     print('--- En-têtes HTTP ---')
     test_headers()
@@ -651,6 +858,8 @@ def main():
     test_devis()
     print('\n--- Operateurs mobile money ---')
     test_operateurs()
+    print('\n--- Tableau de bord et navigation ---')
+    test_tableau_de_bord()
     print('\n--- Méthodes HTTP et droits ---')
     test_method_and_rights()
     print('\n--- Limitation des tentatives de connexion ---')

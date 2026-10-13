@@ -239,7 +239,9 @@ def _contexte_commun(request, **extra):
     Contexte de base commun aux pages.
 
     `peut_devis` pilote l'affichage de l'onglet Devis dans la barre de
-    navigation : il est évalué une seule fois par requête.
+    navigation : il doit être présent sur **toutes** les pages, sinon
+    l'onglet apparaît par endroits et disparaît d'autres. Les vues
+    l'utilisent toutes.
     """
     commun = {'peut_devis': peut_creer_devis(request.user)}
     commun.update(extra)
@@ -329,6 +331,15 @@ def dashboard(request):
         'peut_naviguer': request.user.is_staff and budgets_total > 1,
         'categories': budget.resume_categories() if budget else [],
         'repartition_manquante': budget.repartition_incomplete() if budget else True,
+        # Le formulaire de saisie est replié par défaut. Après un
+        # enregistrement réussi la vue est rechargée (donc repli), mais si la
+        # saisie a été rejetée il faut le rouvrir : sinon l'utilisateur ne
+        # voit ni son erreur ni ce qu'il vient de taper.
+        'saisie_ouverte': bool(form.errors),
+        # Sans cette ligne, l'onglet Devis disparaissait du tableau de bord
+        # alors qu'il était présent sur les autres onglets : la barre de
+        # navigation dépend de ce drapeau, pas de l'URL affichée.
+        'peut_devis': peut_creer_devis(request.user),
     }
     return render(request, 'budget_app/dashboard.html', context)
 

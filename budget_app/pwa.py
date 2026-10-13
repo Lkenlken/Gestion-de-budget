@@ -15,7 +15,7 @@ from django.http import HttpResponse, JsonResponse
 from django.templatetags.static import static
 from django.views.decorators.cache import never_cache
 
-COULEUR_THEME = '#2563eb'
+COULEUR_THEME = '#081052'
 COULEUR_FOND = '#f8fafc'
 
 
