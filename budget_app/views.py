@@ -1,6 +1,6 @@
 import logging
 import re
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from functools import wraps
 from urllib.parse import quote
 
@@ -16,6 +16,7 @@ from django.db.models import Count, DecimalField, F, Sum
 from django.db.models.functions import Coalesce, TruncMonth
 from django.http import Http404, HttpResponse, HttpResponseForbidden
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
@@ -297,7 +298,10 @@ def dashboard(request):
                 created_at__gt=budget.created_at
             ).order_by('created_at').first()
 
-    # Gestion du formulaire d'ajout de dépense
+    # Gestion du formulaire d'ajout de dépense (1 à 5 lignes, date partagée)
+    NB_LIGNES_MAX = 5
+    saisie_ouverte = bool(form.errors)
+
     if request.method == 'POST':
         if not budget:
             messages.error(
@@ -306,13 +310,84 @@ def dashboard(request):
             )
             return redirect('budget_app:dashboard')
 
-        form = DepenseForm(request.POST)
-        if form.is_valid():
-            depense = form.save(commit=False)
-            depense.budget = budget
-            depense.utilisateur = request.user
-            depense.save()
-            messages.success(request, "Dépense ajoutée avec succès !")
+        date_saisie = (request.POST.get('date') or '').strip()
+        lignes_valides = []
+        erreurs = []
+
+        for i in range(NB_LIGNES_MAX):
+            designation = (request.POST.get(f'designation_{i}') or '').strip()
+            prix_brut = (request.POST.get(f'prix_unitaire_{i}') or '').strip()
+            quantite_brut = (request.POST.get(f'quantite_{i}') or '1').strip()
+            categorie_id = (request.POST.get(f'categorie_{i}') or '').strip()
+
+            # Ligne vide : on l'ignore
+            if not designation and not prix_brut:
+                continue
+
+            # Validation désignation
+            if not designation:
+                erreurs.append(f"Ligne {i + 1} : indiquez la désignation.")
+                continue
+
+            # Validation prix unitaire
+            try:
+                prix_unitaire = Decimal(prix_brut.replace(' ', '').replace(',', '.'))
+                if prix_unitaire < 0:
+                    raise InvalidOperation
+            except (InvalidOperation, ValueError):
+                erreurs.append(f"Ligne {i + 1} : prix unitaire invalide (« {prix_brut} »).")
+                continue
+
+            # Validation quantité
+            try:
+                quantite = int(quantite_brut)
+                if quantite < 1:
+                    raise ValueError
+            except ValueError:
+                erreurs.append(f"Ligne {i + 1} : quantité invalide (« {quantite_brut} »).")
+                continue
+
+            # Validation catégorie (optionnelle)
+            categorie = None
+            if categorie_id:
+                try:
+                    categorie = CategorieBudget.objects.get(
+                        pk=int(categorie_id), active=True
+                    )
+                except (CategorieBudget.DoesNotExist, ValueError):
+                    pass  # reste sans catégorie
+
+            lignes_valides.append({
+                'designation': designation,
+                'prix_unitaire': prix_unitaire,
+                'quantite': quantite,
+                'categorie': categorie,
+            })
+
+        if erreurs:
+            for erreur in erreurs:
+                messages.error(request, erreur)
+            saisie_ouverte = True
+        elif not lignes_valides:
+            messages.error(request, "Au moins une dépense doit être saisie.")
+            saisie_ouverte = True
+        else:
+            with transaction.atomic():
+                for ligne in lignes_valides:
+                    Depense.objects.create(
+                        budget=budget,
+                        utilisateur=request.user,
+                        date=date_saisie or timezone.now().date(),
+                        designation=ligne['designation'],
+                        prix_unitaire=ligne['prix_unitaire'],
+                        quantite=ligne['quantite'],
+                        categorie=ligne['categorie'],
+                    )
+            nb = len(lignes_valides)
+            messages.success(
+                request,
+                f"{nb} dépense{'s' if nb > 1 else ''} enregistrée{'s' if nb > 1 else ''} avec succès !",
+            )
             return redirect('budget_app:dashboard')
 
     # Évolution : dernier budget créé supérieur au budget courant ?
@@ -335,7 +410,7 @@ def dashboard(request):
         # enregistrement réussi la vue est rechargée (donc repli), mais si la
         # saisie a été rejetée il faut le rouvrir : sinon l'utilisateur ne
         # voit ni son erreur ni ce qu'il vient de taper.
-        'saisie_ouverte': bool(form.errors),
+        'saisie_ouverte': saisie_ouverte,
         # Sans cette ligne, l'onglet Devis disparaissait du tableau de bord
         # alors qu'il était présent sur les autres onglets : la barre de
         # navigation dépend de ce drapeau, pas de l'URL affichée.

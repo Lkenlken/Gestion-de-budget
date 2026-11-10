@@ -66,6 +66,22 @@ register.filter('abs', absv)
 
 
 @register.filter
+def range_(value):
+    """
+    Génère une séquence de nombres de 0 à `value`-1, pour boucler dans un template.
+
+    Usage : {% for i in 5|range_ %} ... {% endfor %}
+    """
+    try:
+        n = int(value)
+    except (ValueError, TypeError):
+        return []
+    if n < 0:
+        return []
+    return range(n)
+
+
+@register.filter
 def ar(value):
     """
     Formate un montant en Ariary : 1234567.8 -> "1 234 567.80 Ar".

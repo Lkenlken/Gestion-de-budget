@@ -215,6 +215,7 @@
                     {% csrf_token %}
 
                     <div class="row g-3">
+                        <!-- Date partagée pour toutes les lignes -->
                         <div class="col-12 col-md-6">
                             <label for="{{ form.date.id_for_label }}" class="form-label fw-semibold">{{ form.date.label }}</label>
                             {{ form.date }}
@@ -223,90 +224,116 @@
                             {% endif %}
                         </div>
 
-                        <div class="col-12 col-md-6">
-                            <label for="{{ form.designation.id_for_label }}" class="form-label fw-semibold">{{ form.designation.label }}</label>
-                            {{ form.designation }}
-                            {% if form.designation.errors %}
-                                <div class="text-danger small mt-1">{{ form.designation.errors }}</div>
-                            {% endif %}
+                        <div class="col-12 col-md-6 d-flex align-items-end">
+                            <span class="form-text small text-muted">
+                                Cette date s'applique à toutes les lignes ci-dessous.
+                            </span>
                         </div>
+                    </div>
 
-                        <div class="col-12 col-md-6">
-                            <label for="{{ form.prix_unitaire.id_for_label }}" class="form-label fw-semibold">{{ form.prix_unitaire.label }}</label>
-                            <div class="input-group">
-                                <span class="input-group-text">Ar</span>
-                                {{ form.prix_unitaire }}
+                    <!-- Lignes de dépenses (jusqu'à 5) -->
+                    <div id="lignes-depense" class="row g-3 mt-3">
+                        {% for i in 5|range_ %}
+                        <div class="col-12 ligne-depense{% if i > 0 %} d-none{% endif %}" data-ligne="{{ i }}">
+                            <div class="card border-0 shadow-sm mb-3">
+                                <div class="card-header bg-light border-bottom py-2">
+                                    <span class="fw-semibold text-muted small">Ligne {{ i|add:1 }}</span>
+                                </div>
+                                <div class="card-body p-3">
+                                    <div class="row g-3">
+                                        <div class="col-12 col-md-5">
+                                            <label class="form-label fw-semibold small">Désignation</label>
+                                            <input type="text" name="designation_{{ i }}"
+                                                   class="form-control designation-ligne form-control-sm"
+                                                   placeholder="Ex: Courses, Transport, Facture…"
+                                                   data-ligne="{{ i }}">
+                                            {% if i == 0 and form.designation.errors %}
+                                                <div class="text-danger small mt-1">{{ form.designation.errors }}</div>
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label fw-semibold small">Prix unitaire (Ar)</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text">Ar</span>
+                                                <input type="number" name="prix_unitaire_{{ i }}"
+                                                       class="form-control prix-ligne form-control-sm"
+                                                       step="0.01" min="0" placeholder="0.00"
+                                                       data-ligne="{{ i }}">
+                                            </div>
+                                            {% if i == 0 and form.prix_unitaire.errors %}
+                                                <div class="text-danger small mt-1">{{ form.prix_unitaire.errors }}</div>
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="col-12 col-md-2">
+                                            <label class="form-label fw-semibold small">Qté</label>
+                                            <input type="number" name="quantite_{{ i }}"
+                                                   class="form-control quantite-ligne form-control-sm"
+                                                   min="1" value="1" data-ligne="{{ i }}">
+                                            {% if i == 0 and form.quantite.errors %}
+                                                <div class="text-danger small mt-1">{{ form.quantite.errors }}</div>
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="col-12 col-md-2">
+                                            <label class="form-label fw-semibold small d-block">Catégorie</label>
+                                            <div class="categorie-choix" role="radiogroup"
+                                                 aria-label="Catégorie ligne {{ i|add:1 }}">
+                                                {% for choix in form.choix_categories %}
+                                                    <input type="radio" class="visually-hidden"
+                                                           name="categorie_{{ i }}"
+                                                           id="categorie_{{ i }}_{{ choix.id }}"
+                                                           value="{{ choix.id }}"
+                                                           data-categorie-choix data-ligne="{{ i }}"
+                                                           {% if i == 0 and choix.coche %}checked{% endif %}>
+                                                    <label class="categorie-puce" for="categorie_{{ i }}_{{ choix.id }}"
+                                                           style="--teinte: {{ choix.teinte }}; --fond: {{ choix.fond }};">
+                                                        <i class="bi {{ choix.icone }}"></i>{{ choix.nom }}
+                                                    </label>
+                                                {% endfor %}
+
+                                                <input type="radio" class="visually-hidden"
+                                                       name="categorie_{{ i }}"
+                                                       id="categorie_{{ i }}_0" value=""
+                                                       data-categorie-choix data-ligne="{{ i }}"
+                                                       {% if i == 0 %}checked{% endif %}>
+                                                <label class="categorie-puce categorie-puce-none" for="categorie_{{ i }}_0">
+                                                    <i class="bi bi-dash-circle"></i>Sans catégorie
+                                                </label>
+                                            </div>
+                                            {% if i == 0 and form.categorie.errors %}
+                                                <div class="text-danger small mt-1">{{ form.categorie.errors }}</div>
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="col-12">
+                                            <div class="alert alert-info py-2 mb-0">
+                                                <i class="bi bi-calculator me-2"></i>
+                                                <strong>Total ligne {{ i|add:1 }} : </strong>
+                                                <span id="montant-total-ligne-{{ i }}"
+                                                      class="fw-bold fs-5">0.00 Ar</span>
+                                            </div>
+                                        </div>
+
+                                        {% if i < 4 %}
+                                        <div class="col-12 d-flex justify-content-end mt-2">
+                                            <button type="button" class="btn btn-outline-danger btn-sm btn-supp-ligne"
+                                                    data-ligne="{{ i }}" disabled>
+                                                <i class="bi bi-trash me-1"></i>Effacer cette ligne
+                                            </button>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
                             </div>
-                            {% if form.prix_unitaire.errors %}
-                                <div class="text-danger small mt-1">{{ form.prix_unitaire.errors }}</div>
-                            {% endif %}
                         </div>
-
-                        <div class="col-12 col-md-6">
-                            <label for="{{ form.quantite.id_for_label }}" class="form-label fw-semibold">{{ form.quantite.label }}</label>
-                            {{ form.quantite }}
-                            {% if form.quantite.errors %}
-                                <div class="text-danger small mt-1">{{ form.quantite.errors }}</div>
-                            {% endif %}
-                        </div>
-
-                        <div class="col-12">
-                            <label class="form-label fw-semibold d-block">{{ form.categorie.label }}</label>
-                            {% if form.choix_categories %}
-                                <div class="categorie-choix" role="radiogroup"
-                                     aria-label="{{ form.categorie.label }}">
-                                    {% for choix in form.choix_categories %}
-                                        <input type="radio" class="visually-hidden"
-                                               name="{{ form.categorie.html_name }}"
-                                               id="categorie_{{ choix.id }}"
-                                               value="{{ choix.id }}"
-                                               data-categorie-choix
-                                               {% if choix.coche %}checked{% endif %}>
-                                        <label class="categorie-puce" for="categorie_{{ choix.id }}"
-                                               style="--teinte: {{ choix.teinte }}; --fond: {{ choix.fond }};">
-                                            <i class="bi {{ choix.icone }}"></i>{{ choix.nom }}
-                                        </label>
-                                    {% endfor %}
-
-                                    <input type="radio" class="visually-hidden"
-                                           name="{{ form.categorie.html_name }}"
-                                           id="categorie_0" value=""
-                                           data-categorie-choix
-                                           {% if not form.choix_categories|length or not form.instance.categorie_id %}checked{% endif %}>
-                                    <label class="categorie-puce categorie-puce-none" for="categorie_0">
-                                        <i class="bi bi-dash-circle"></i>Sans catégorie
-                                    </label>
-                                </div>
-                                <div class="form-text small">
-                                    La catégorie sert à suivre la consommation de chaque poste.
-                                    Un clic sur un poste ci-dessus la préselectionne.
-                                </div>
-                            {% else %}
-                                <div class="alert alert-warning py-2 mb-0 small">
-                                    <i class="bi bi-exclamation-triangle me-1"></i>
-                                    Aucune catégorie n'est définie.
-                                    {% if is_staff %}
-                                        <a href="{% url 'admin:budget_app_categoriebudget_changelist' %}">Créer les postes</a>
-                                    {% endif %}
-                                </div>
-                            {% endif %}
-                            {% if form.categorie.errors %}
-                                <div class="text-danger small mt-1">{{ form.categorie.errors }}</div>
-                            {% endif %}
-                        </div>
-
-                        <div class="col-12">
-                            <div class="alert alert-info py-2 mb-0" id="montant-total-preview">
-                                <i class="bi bi-calculator me-2"></i>
-                                <strong>Montant total de la ligne : </strong>
-                                <span id="montant-total-value" class="fw-bold fs-5">0.00 Ar</span>
-                            </div>
-                        </div>
+                        {% endfor %}
                     </div>
 
                     <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
                         <button type="submit" class="btn btn-primary btn-lg px-4">
-                            <i class="bi bi-save me-1"></i>Enregistrer la dépense
+                            <i class="bi bi-save me-1"></i>Enregistrer les dépenses
                         </button>
                     </div>
                 </form>
@@ -508,6 +535,116 @@
                 }
             });
         });
+    })();
+
+    /* ------------------------------------------------------------------
+       Formulaire « Nouvelle Dépense » : jusqu'à 5 lignes avec date partagée.
+       - Quand une ligne est renseignée (désignation), la ligne suivante
+         apparaît automatiquement.
+       - Le total de chaque ligne se recalcule quand le prix ou la quantité
+         change.
+       - Le bouton « Enregistrer » envoie toutes les lignes d'un coup.
+       ------------------------------------------------------------------ */
+    (function () {
+        var NB_LIGNES_MAX = 5;
+        var container = document.getElementById('lignes-depense');
+        if (!container) return;
+
+        var lignes = Array.prototype.slice.call(
+            container.querySelectorAll('.ligne-depense')
+        );
+
+        /* Récupère les champs d'une ligne donnée */
+        function champsLigne(index) {
+            var ligne = lignes[index];
+            if (!ligne) return null;
+            return {
+                designation: ligne.querySelector('input[name="designation_' + index + '"]'),
+                prix: ligne.querySelector('input[name="prix_unitaire_' + index + '"]'),
+                quantite: ligne.querySelector('input[name="quantite_' + index + '"]'),
+                total: document.getElementById('montant-total-ligne-' + index),
+            };
+        }
+
+        /* Formate un montant en Ariary avec séparateurs */
+        function formaterMontant(valeur) {
+            var n = parseFloat(valeur) || 0;
+            return n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' Ar';
+        }
+
+        /* Recalcule le total d'une ligne */
+        function calculerTotal(index) {
+            var c = champsLigne(index);
+            if (!c || !c.total) return;
+            var prix = parseFloat(c.prix ? c.prix.value : '') || 0;
+            var qte = parseInt(c.quantite ? c.quantite.value : '') || 1;
+            var total = prix * qte;
+            c.total.textContent = formaterMontant(total);
+        }
+
+        /* Détermine si une ligne est « remplie » (désignation saisie) */
+        function ligneRemplie(index) {
+            var c = champsLigne(index);
+            if (!c || !c.designation) return false;
+            return c.designation.value.trim() !== '';
+        }
+
+        /* Affiche la ligne suivante si la current est remplie et qu'il en reste */
+        function afficherLigneSuivante(index) {
+            if (index + 1 >= NB_LIGNES_MAX) return;
+            var suivante = lignes[index + 1];
+            if (!suivante) return;
+            if (suivante.classList.contains('d-none')) {
+                suivante.classList.remove('d-none');
+                var premierInput = suivante.querySelector('input[name="designation_' + (index + 1) + '"]');
+                if (premierInput) premierInput.focus();
+            }
+        }
+
+        /* Gère le bouton « Effacer cette ligne » */
+        function initBoutonsSupp() {
+            lignes.forEach(function (ligne, index) {
+                var btn = ligne.querySelector('.btn-supp-ligne');
+                if (!btn) return;
+                btn.addEventListener('click', function () {
+                    ligne.querySelectorAll('input').forEach(function (input) {
+                        input.value = '';
+                        if (input.type === 'number' && input.name.indexOf('quantite') !== -1) {
+                            input.value = '1';
+                        }
+                    });
+                    var radioVide = ligne.querySelector('input[name="categorie_' + index + '"][value=""]');
+                    if (radioVide) radioVide.checked = true;
+                    calculerTotal(index);
+                    ligne.classList.add('d-none');
+                    // Masquer aussi les lignes suivantes
+                    for (var j = index + 1; j < NB_LIGNES_MAX; j++) {
+                        if (lignes[j] && !lignes[j].classList.contains('d-none')) {
+                            lignes[j].classList.add('d-none');
+                        }
+                    }
+                });
+            });
+        }
+
+        /* Écouteurs sur chaque champ de chaque ligne */
+        lignes.forEach(function (ligne, index) {
+            ligne.querySelectorAll('input').forEach(function (input) {
+                input.addEventListener('input', function () {
+                    calculerTotal(index);
+                    // Si la désignation est remplie, afficher la ligne suivante
+                    if (input.name.indexOf('designation_') !== -1 && ligneRemplie(index)) {
+                        afficherLigneSuivante(index);
+                    }
+                });
+            });
+        });
+
+        /* Initialisation : calculer les totaux des lignes visibles, activer les boutons suppr */
+        lignes.forEach(function (_, index) {
+            calculerTotal(index);
+        });
+        initBoutonsSupp();
     })();
 </script>
 {% endblock %}
